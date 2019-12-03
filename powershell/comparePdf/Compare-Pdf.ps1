@@ -126,11 +126,13 @@ $startTime = Get-Date
 if (Test-Path $outCsvFilePath) { rm $outCsvFilePath -Force }
 dir $beforeDir -Include *.pdf -Name | Compare-Pdf
 
-Import-Csv $outCsvFilePath |
-    ConvertTo-Html | % { $_ -replace "<table>", "<table border=`"1`" style=`"border-collapse: collapse`">" `
-                            -replace "</td>", "</td>`n" `
-                            -replace "C:\\(\S+)`.png</td>", "<img src=`"C:\`$1`.png`" width=`"300`"></td>" } |
-    Out-File $outHtmlFilePath -Encoding default
+Import-Csv $outCsvFilePath | ConvertTo-Html | ? {
+        $_ -notmatch "<td>OK</td>"
+    } | % {
+        $_ -replace "<table>", "<table border=`"1`" style=`"border-collapse: collapse`">" `
+           -replace "</td>", "</td>`n" `
+           -replace "C:\\(\S+)`.png</td>", "<img src=`"C:\`$1`.png`" width=`"300`"></td>"
+    } | Out-File $outHtmlFilePath -Encoding default
 
 $endTime = Get-Date
 Write-Host ("Start: {0}" -f $startTime)
