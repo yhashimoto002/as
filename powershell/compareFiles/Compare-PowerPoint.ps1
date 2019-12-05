@@ -14,8 +14,8 @@ $identifyThreshold = "1000"
 
 ## don't change
 $outputDir = Join-Path $PSScriptRoot "output"
-$outCsvFilePath = Join-Path $PSScriptRoot "result.csv"
-$outHtmlFilePath = Join-Path $PSScriptRoot "result_NG.html"
+$outCsvFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
+$outHtmlFilePath = Join-Path $PSScriptRoot ("result_NG_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".html")
 $count = 0
 
 
@@ -61,13 +61,6 @@ function Convert-PowerPointToPng
             Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} to PNG ..." -f (Get-Date), $powerpointFullPath)
             # https://docs.microsoft.com/en-us/previous-versions/office/developer/office-2010/ff762466%28v%3doffice.14%29
             $presentations.SaveAs($OutDir, [Microsoft.Office.Interop.PowerPoint.PpSaveAsFileType]::ppSaveAsPNG)
-            <#
-            $num = 0
-            Get-ChildItem $OutDir | sort -Property LastWriteTime | % {
-                Rename-Item $_.FullName -NewName image-${num}.png -Force
-                $num += 1
-            }
-            #>
             $presentations.Saved = $true
             Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1} is successfully converted to PNG." -f (Get-Date), $powerpointFullPath)
         }
@@ -97,16 +90,26 @@ function Convert-PowerPointToPng
             [void][GC]::WaitForPendingFinalizers()
             [void][GC]::Collect
 
+            # export to csv
+            $arrayResult = @()
+            $objectOfEachRecord = [pscustomobject]@{
+                FileName=$powerpointFullPath
+                Result=$result
+                Error=$errMessage
+            }
+            $arrayResult += $objectOfEachRecord
+            $arrayResult | Export-Csv $outFilePathOfConvertOffice  -encoding Default -NoTypeInformation -Append
+            Write-Host ""
         }
     }
 
     end
     {
-        Write-Host ""
         #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} FINISHED converting PowerPoint to PDF" -f (Get-Date))
         #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} ------------------------------" -f (Get-Date))
     }
 }
+
 
 function Compare-PowerPoint
 {
@@ -173,6 +176,7 @@ function Compare-PowerPoint
 
 # main
 $startTime = Get-Date
+
 if (Test-Path $outCsvFilePath)
 {
     try
@@ -185,6 +189,21 @@ if (Test-Path $outCsvFilePath)
         exit 1
     }
 }
+
+$outFilePathOfConvertOffice = Join-Path $PSScriptRoot ("result_convert_office_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
+if (Test-Path $outFilePathOfConvertOffice)
+{
+    try
+    {
+        Remove-Item $outFilePathOfConvertOffice -ErrorAction Stop
+    }
+    catch
+    {
+        Write-Error ("Error: {0}" -f $_.Exception.Message)
+        exit 1
+    }
+}
+
 $powerpointRegex = "^.*`.(ppt|pptx|pptm|pot|potx|potm|pps|ppsx|ppsm)$"
 dir $beforeDir | ? { $_.Name -match $powerpointRegex } | Compare-PowerPoint
 
