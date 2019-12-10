@@ -39,56 +39,87 @@ $fc_config = "$fc_install_dir\FileConnector.config"
 
 
 # load config
-$conf = Get-Content (Join-Path $PSScriptRoot "settings.ini") | ? { $_ -match "=" } | ConvertFrom-StringData
+$conf = Get-Content (Join-Path $PSScriptRoot "settings.ini") | Where-Object { $_ -match "=" } | ConvertFrom-StringData
 $fe_config = $conf.FeConfig
+
 $default_channel_in = $conf.DefaultChannelIn
 $default_channel_out = $conf.DefaultChannelOut
-$channel_name = $conf.ChannelName
-$channel_in = $conf.ChannelIn
-$channel_out = $conf.ChannelOut
-$policy_config_name = $conf.PolicyConfigurationName
-$policy_name = $conf.PolicyName
 
-$simple_policy = @{}
-$simple_policy.Add("CleanOffice", $conf.CleanOffice)
-$simple_policy.Add("CleanPdf", $conf.CleanPdf)
-$simple_policy.Add("CleanImages", $conf.CleanImages)
-$simple_policy.Add("CleanCad", $conf.CleanCad)
-$simple_policy.Add("ExtractEmls", $conf.ExtractEmls)
-$simple_policy.Add("BlockPasswordProtectedArchives", $conf.BlockPasswordProtectedArchives)
-$simple_policy.Add("BlockPasswordProtectedOffice", $conf.BlockPasswordProtectedOffice)
-$simple_policy.Add("BlockPasswordProtectedPdfs", $conf.BlockPasswordProtectedPdfs)
-$simple_policy.Add("BlockAllPasswordProtected", $conf.BlockAllPasswordProtected)
-$simple_policy.Add("Blockunsupported", $conf.Blockunsupported)
-$simple_policy.Add("ScanVirus", $conf.ScanVirus)
-$simple_policy.Add("BlockUnknownFiles", $conf.BlockUnknownFiles)
-$simple_policy.Add("ExtractArchiveFiles", $conf.ExtractArchiveFiles)
-$simple_policy.Add("BlockEquationOleObject", $conf.BlockEquationOleObject)
-$simple_policy.Add("BlockBinaryFiles", $conf.BlockBinaryFiles)
-$simple_policy.Add("BlockScriptFiles", $conf.BlockScriptFiles)
-$simple_policy.Add("BlockFakeFiles", $conf.BlockFakeFiles)
+$fe_channel_name = $conf.FeChannelName
+$fe_channel_in = $conf.FeChannelIn
+$fe_channel_out = $conf.FeChannelOut
+$fe_policy_config_name = $conf.FePolicyConfigurationName
+$fe_policy_name = $conf.FePolicyName
+
+$fe_simple_policy = @{}
+$fe_simple_policy.Add("CleanOffice", $conf.FeCleanOffice)
+$fe_simple_policy.Add("CleanPdf", $conf.FeCleanPdf)
+$fe_simple_policy.Add("CleanImages", $conf.FeCleanImages)
+$fe_simple_policy.Add("ExtractEmls", $conf.FeExtractEmls)
+$fe_simple_policy.Add("BlockPasswordProtectedArchives", $conf.FeBlockPasswordProtectedArchives)
+$fe_simple_policy.Add("BlockPasswordProtectedOffice", $conf.FeBlockPasswordProtectedOffice)
+$fe_simple_policy.Add("BlockPasswordProtectedPdfs", $conf.FeBlockPasswordProtectedPdfs)
+$fe_simple_policy.Add("BlockAllPasswordProtected", $conf.FeBlockAllPasswordProtected)
+$fe_simple_policy.Add("Blockunsupported", $conf.FeBlockunsupported)
+$fe_simple_policy.Add("BlockFakeFiles", $conf.FeBlockFakeFiles)
+$fe_simple_policy.Add("ScanVirus", $conf.FeScanVirus)
+$fe_simple_policy.Add("BlockUnknownFiles", $conf.FeBlockUnknownFiles)
+$fe_simple_policy.Add("ExtractArchiveFiles", $conf.FeExtractArchiveFiles)
+$fe_simple_policy.Add("BlockEquationOleObject", $conf.FeBlockEquationOleObject)
+$fe_simple_policy.Add("BlockBinaryFiles", $conf.FeBlockBinaryFiles)
+$fe_simple_policy.Add("BlockScriptFiles", $conf.FeBlockScriptFiles)
+
+$sample_channel_name = $conf.SampleChannelName
+$sample_channel_in = $conf.SampleChannelIn
+$sample_channel_out = $conf.SampleChannelOut
+$sample_policy_config_name = $conf.SamplePolicyConfigurationName
+$sample_policy_name = $conf.SamplePolicyName
+
+$sample_simple_policy = @{}
+$sample_simple_policy.Add("CleanOffice", $conf.SampleCleanOffice)
+$sample_simple_policy.Add("CleanPdf", $conf.SampleCleanPdf)
+$sample_simple_policy.Add("CleanImages", $conf.SampleCleanImages)
+$sample_simple_policy.Add("ExtractEmls", $conf.SampleExtractEmls)
+$sample_simple_policy.Add("BlockPasswordProtectedArchives", $conf.SampleBlockPasswordProtectedArchives)
+$sample_simple_policy.Add("BlockPasswordProtectedOffice", $conf.SampleBlockPasswordProtectedOffice)
+$sample_simple_policy.Add("BlockPasswordProtectedPdfs", $conf.SampleBlockPasswordProtectedPdfs)
+$sample_simple_policy.Add("BlockAllPasswordProtected", $conf.SampleBlockAllPasswordProtected)
+$sample_simple_policy.Add("Blockunsupported", $conf.SampleBlockunsupported)
+$sample_simple_policy.Add("BlockFakeFiles", $conf.SampleBlockFakeFiles)
+$sample_simple_policy.Add("ScanVirus", $conf.SampleScanVirus)
+$sample_simple_policy.Add("BlockUnknownFiles", $conf.SampleBlockUnknownFiles)
+$sample_simple_policy.Add("ExtractArchiveFiles", $conf.SampleExtractArchiveFiles)
+$sample_simple_policy.Add("BlockEquationOleObject", $conf.SampleBlockEquationOleObject)
+$sample_simple_policy.Add("BlockBinaryFiles", $conf.SampleBlockBinaryFiles)
+$sample_simple_policy.Add("BlockScriptFiles", $conf.SampleBlockScriptFiles)
+
+
+# mkdir
+New-Item ("\\$IpAddr\" + $default_channel_in.replace("c:", "c$")) -ItemType Directory -Force | Out-Null
+New-Item ("\\$IpAddr\" + $fe_channel_in.replace("c:", "c$")) -ItemType Directory -Force | Out-Null
+New-Item ("\\$IpAddr\" + $sample_channel_in.replace("c:", "c$")) -ItemType Directory -Force | Out-Null
 
 
 # backup
 if(! (Test-Path $ws_config_machine".org"))
 {
-    cp $ws_config_machine -Destination $ws_config_machine".org"
+    Copy-Item $ws_config_machine -Destination $ws_config_machine".org"
 }
 if(! (Test-Path $ws_config_webapi".org"))
 {
-    cp $ws_config_webapi -Destination $ws_config_webapi".org"
+    Copy-Item $ws_config_webapi -Destination $ws_config_webapi".org"
 }
 if(! (Test-Path $ws_config_publish".org"))
 {
-    cp $ws_config_publish -Destination $ws_config_publish".org"
+    Copy-Item $ws_config_publish -Destination $ws_config_publish".org"
 }
 if(! (Test-Path $ws_config_websrv".org"))
 {
-    cp $ws_config_websrv -Destination $ws_config_websrv".org"
+    Copy-Item $ws_config_websrv -Destination $ws_config_websrv".org"
 }
 if(! (Test-Path $fc_config".org"))
 {
-    cp $fc_config -Destination $fc_config".org"
+    Copy-Item $fc_config -Destination $fc_config".org"
 }
 
 
@@ -107,18 +138,38 @@ Write-Host "Modifying WS configuration ..."
 $fc_xml.FileConnector.MaxWebApiThreads = "64"
 $fc_xml.FileConnector.WebApiSettings.WebApiTimeOutInMS = "3600000"
 $fc_xml.FileConnector.WebApiSettings.WebApiStatusCheckIntervalInMS = "1000"
-($fc_xml.FileConnector.Channels.Channel | ? { $_.Name -eq "DefaultChannel" }).In = $default_channel_in
-($fc_xml.FileConnector.Channels.Channel | ? { $_.Name -eq "DefaultChannel" }).Out = $default_channel_out
-($fc_xml.FileConnector.Channels.Channel | ? { $_.Name -eq "DefaultChannel" }).InProcessItemsLimit = "150"
+# - default
+($fc_xml.FileConnector.Channels.Channel | Where-Object { $_.Name -eq "DefaultChannel" }).In = $default_channel_in
+($fc_xml.FileConnector.Channels.Channel | Where-Object { $_.Name -eq "DefaultChannel" }).Out = $default_channel_out
+($fc_xml.FileConnector.Channels.Channel | Where-Object { $_.Name -eq "DefaultChannel" }).InProcessItemsLimit = "150"
+# - fe
 $node = $fc_xml.FileConnector.Channels
-$childnode = $node.Channel | ? { $_.Name -eq $channel_name}
+$childnode = $node.Channel | Where-Object { $_.Name -eq $fe_channel_name}
 if (! $childnode)
 {
     $element_channel = $fc_xml.CreateElement("Channel")
-    [void]$element_channel.SetAttribute("Name", $channel_name)
-    [void]$element_channel.SetAttribute("In", $channel_in)
-    [void]$element_channel.SetAttribute("Out", $channel_out)
-    [void]$element_channel.SetAttribute("PolicyConfigurationName", $policy_config_name)
+    [void]$element_channel.SetAttribute("Name", $fe_channel_name)
+    [void]$element_channel.SetAttribute("In", $fe_channel_in)
+    [void]$element_channel.SetAttribute("Out", $fe_channel_out)
+    [void]$element_channel.SetAttribute("PolicyConfigurationName", $fe_policy_config_name)
+    [void]$element_channel.SetAttribute("IgnoreEmptyFile", "true")
+    [void]$element_channel.SetAttribute("DeleteAfterSanitization", "true")
+    [void]$element_channel.SetAttribute("InProcessItemsLimit", "150")
+    [void]$element_channel.SetAttribute("FileNotChangedInSeconds", "2")
+    [void]$element_channel.SetAttribute("ExcludedExtensions", ".partial,.part,.crdownload")
+    [void]$element_channel.SetAttribute("IgnoreFilesWithoutExtension", "False")
+    [void]$element_channel.SetAttribute("MaxFileSizeInBytes", "9223372036854775807")
+    [void]$node.AppendChild($element_channel)
+}
+# - sample
+$childnode = $node.Channel | Where-Object { $_.Name -eq $sample_channel_name}
+if (! $childnode)
+{
+    $element_channel = $fc_xml.CreateElement("Channel")
+    [void]$element_channel.SetAttribute("Name", $sample_channel_name)
+    [void]$element_channel.SetAttribute("In", $sample_channel_in)
+    [void]$element_channel.SetAttribute("Out", $sample_channel_out)
+    [void]$element_channel.SetAttribute("PolicyConfigurationName", $sample_policy_config_name)
     [void]$element_channel.SetAttribute("IgnoreEmptyFile", "true")
     [void]$element_channel.SetAttribute("DeleteAfterSanitization", "true")
     [void]$element_channel.SetAttribute("InProcessItemsLimit", "150")
@@ -129,20 +180,42 @@ if (! $childnode)
     [void]$node.AppendChild($element_channel)
 }
 
+# - fe
 $node = $fc_xml.FileConnector.Policies
-$childnode = $node.PolicyParams | ? { $_.Name -eq $policy_config_name}
+$childnode = $node.PolicyParams | Where-Object { $_.Name -eq $fe_policy_config_name}
 if (! $childnode)
 {
     $element_policyparams = $fc_xml.CreateElement("PolicyParams")
-    [void]$element_policyparams.SetAttribute("Name", $policy_config_name)
+    [void]$element_policyparams.SetAttribute("Name", $fe_policy_config_name)
     [void]$node.AppendChild($element_policyparams)
-    $childnode = $node.PolicyParams | ? { $_.Name -eq $policy_config_name}
+    $childnode = $node.PolicyParams | Where-Object { $_.Name -eq $fe_policy_config_name}
     $element_predefinedpolicy = $fc_xml.CreateElement("PredefinedPolicy")
-    [void]$element_predefinedpolicy.SetAttribute("PolicyName",$policy_name)
+    [void]$element_predefinedpolicy.SetAttribute("PolicyName",$fe_policy_name)
     [void]$childnode.AppendChild($element_predefinedpolicy)
     $element_policyrules = $fc_xml.CreateElement("PolicyRules")
     [Xml.XmlNode]$childchildnode = $childnode.AppendChild($element_policyrules)
-    foreach ($entry in $simple_policy.GetEnumerator())
+    foreach ($entry in $fe_simple_policy.GetEnumerator())
+    {
+        $element_add = $fc_xml.CreateElement("add")
+        [void]$element_add.SetAttribute("Name", $entry.Key)
+        [void]$element_add.SetAttribute("Value", $entry.Value)
+        [void]$childchildnode.AppendChild($element_add)
+    }
+}
+# - sample
+$childnode = $node.PolicyParams | Where-Object { $_.Name -eq $sample_policy_config_name}
+if (! $childnode)
+{
+    $element_policyparams = $fc_xml.CreateElement("PolicyParams")
+    [void]$element_policyparams.SetAttribute("Name", $sample_policy_config_name)
+    [void]$node.AppendChild($element_policyparams)
+    $childnode = $node.PolicyParams | Where-Object { $_.Name -eq $sample_policy_config_name}
+    $element_predefinedpolicy = $fc_xml.CreateElement("PredefinedPolicy")
+    [void]$element_predefinedpolicy.SetAttribute("PolicyName",$sample_policy_name)
+    [void]$childnode.AppendChild($element_predefinedpolicy)
+    $element_policyrules = $fc_xml.CreateElement("PolicyRules")
+    [Xml.XmlNode]$childchildnode = $childnode.AppendChild($element_policyrules)
+    foreach ($entry in $sample_simple_policy.GetEnumerator())
     {
         $element_add = $fc_xml.CreateElement("add")
         [void]$element_add.SetAttribute("Name", $entry.Key)
@@ -191,7 +264,7 @@ if ($Hostname)
 
     # publish.xml
     $node = $ws_xml_publish.ArrayOfPolicyRule.PolicyRule.Actions
-    $childnode = $node.PolicyAction | ? { $_.type -eq "ReportToManagementAction"}
+    $childnode = $node.PolicyAction | Where-Object { $_.type -eq "ReportToManagementAction"}
     if(! $childnode)
     {
         $element_policyaction = $ws_xml_publish.CreateElement("PolicyAction")
@@ -199,19 +272,21 @@ if ($Hostname)
         $element_backupfolderpath = $ws_xml_publish.CreateElement("BackupFolderPath")
         $element_backupfolderpath.InnerText = "C:\backup"
         [void]$node.AppendChild($element_policyaction)
-        $childnode = $node.PolicyAction | ? { $_.type -eq "ReportToManagementAction"}
+        $childnode = $node.PolicyAction | Where-Object { $_.type -eq "ReportToManagementAction"}
         [void]$childnode.AppendChild($element_backupfolderpath)
     }
 
     # sanitize_websrv.xml
-    cp $ws_config_websrv".org" -Destination $ws_config_websrv -Force
+    Copy-Item $ws_config_websrv".org" -Destination $ws_config_websrv -Force
 
     # FileConnector.config
     $node = $fc_xml.FileConnector.Policies
-    $childnode = $node.PolicyParams | ? { $_.Name -eq "DefaultPolicy"}
+    $childnode = $node.PolicyParams | Where-Object { $_.Name -eq "DefaultPolicy"}
     $childnode.PredefinedPolicy.PolicyName = "Default Policy"
-    $childnode = $node.PolicyParams | ? { $_.Name -eq $policy_config_name}
-    $childnode.PredefinedPolicy.PolicyName = $policy_name
+    $childnode = $node.PolicyParams | Where-Object { $_.Name -eq $fe_policy_config_name}
+    $childnode.PredefinedPolicy.PolicyName = $fe_policy_name
+    $childnode = $node.PolicyParams | Where-Object { $_.Name -eq $sample_policy_config_name}
+    $childnode.PredefinedPolicy.PolicyName = $sample_policy_name
 }
 else
 {
@@ -229,20 +304,22 @@ else
 
     # publish.xml
     $node = $ws_xml_publish.ArrayOfPolicyRule.PolicyRule.Actions
-    $childnode = $node.PolicyAction | ? { $_.type -eq "ReportToManagementAction"}
+    $childnode = $node.PolicyAction | Where-Object { $_.type -eq "ReportToManagementAction"}
     if ($childnode)
     {
         [void]$node.RemoveChild($childnode)
     }
 
     # sanitize_websrv.xml
-    cp $fe_config -Destination $ws_config_websrv -Force
+    Copy-Item $fe_config -Destination $ws_config_websrv -Force
 
     # FileConnector.config
     $node = $fc_xml.FileConnector.Policies
-    $childnode = $node.PolicyParams | ? { $_.Name -eq "DefaultPolicy"}
+    $childnode = $node.PolicyParams | Where-Object { $_.Name -eq "DefaultPolicy"}
     $childnode.PredefinedPolicy.PolicyName = ""
-    $childnode = $node.PolicyParams | ? { $_.Name -eq $policy_config_name}
+    $childnode = $node.PolicyParams | Where-Object { $_.Name -eq $fe_policy_config_name}
+    $childnode.PredefinedPolicy.PolicyName = ""
+    $childnode = $node.PolicyParams | Where-Object { $_.Name -eq $sample_policy_config_name}
     $childnode.PredefinedPolicy.PolicyName = ""
 }
 
