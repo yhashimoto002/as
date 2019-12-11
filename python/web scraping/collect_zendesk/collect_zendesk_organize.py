@@ -7,6 +7,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 
 
@@ -34,8 +35,12 @@ current_date = datetime.datetime.now().strftime('%Y%m%d')
 log_name = "zendesk_organize_{}.csv".format(current_date)
 
 
+# selenium option
+_options = Options()
+_options.add_argument('--headless')
+
 # zendesk login
-driver = webdriver.Chrome()
+driver = webdriver.Chrome(options=_options)
 driver.set_page_load_timeout(30)
 driver.get('https://votiro.zendesk.com/')
 form = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "/html/body/div/iframe")))
