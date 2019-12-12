@@ -25,7 +25,8 @@ param(
     [parameter(mandatory)]
     [string]$beforeDir,
     [parameter(mandatory)]
-    [string]$afterDir
+    [string]$afterDir,
+    [switch]$Office
 )
 
 ## change if needed
@@ -36,10 +37,13 @@ $imDensity = "100"
 $identifyThreshold = "1000"
 
 ## don't change
-$outputDir = Join-Path $PSScriptRoot "output"
-$outCsvFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
-$outHtmlFilePath = Join-Path $PSScriptRoot ("result_NG_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".html")
-$count = 0
+if(-not $Office)
+{
+    $outputDir = Join-Path $PSScriptRoot "output"
+    $outCsvFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
+    $outHtmlFilePath = Join-Path $PSScriptRoot ("result_NG_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".html")
+    $script:count = 0
+}
 
 function Convert-PdfToPng
 {
@@ -76,14 +80,14 @@ function Compare-Pdf
         mkdir $diff_dir -Force | Out-Null
 
         # convert pdf to image
-        Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1}" -f (Get-Date), ++$count)
+        Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1}" -f (Get-Date), ++$script:count)
         Convert-PdfToPng -Path (Join-Path $beforeDir $Pdf) -OutDir $before_dir
         Convert-PdfToPng -Path (Join-Path $afterDir $Pdf) -OutDir $after_dir
 
         # compare images and analyze the difference
         $arrayResult = @()
         $page = 0
-        dir $before_dir | sort -Property LastWriteTime | foreach {
+        Get-ChildItem $before_dir | Sort-Object -Property LastWriteTime | ForEach-Object {
             $png = $_.Name
             magick composite -quiet -compose difference (Join-Path $before_dir $png) `
                 (Join-Path $after_dir $png) (Join-Path $diff_dir $png)
@@ -101,9 +105,10 @@ function Compare-Pdf
                 $imageAfterPath = ""
                 $imageDiffPath = ""
             }
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1}/{2}: {3}({4})" -f (Get-Date), $Pdf, $png, $result, $identify) 
+            if($Office) { $Pdf = $Pdf -replace ".pdf$", "" } 
+            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1}/{2}: {3}({4})" -f (Get-Date), $Pdf, $png, $result, $identify)
             $objectOfEachRecord = [pscustomobject]@{
-                "No."=$count
+                "No."=$script:count
                 FileName=$Pdf
                 ImageName=$png
                 Page=++$page
@@ -122,25 +127,31 @@ function Compare-Pdf
 
 
 # main
-$startTime = Get-Date
-if (Test-Path $outCsvFilePath) { rm $outCsvFilePath -Force }
-dir $beforeDir -Include *.pdf -Name | Compare-Pdf
+if(-not $Office)
+{
+    $startTime = Get-Date
+}
 
-Import-Csv $outCsvFilePath | ConvertTo-Html | ? {
+Get-ChildItem $beforeDir -Include *.pdf -Name | Compare-Pdf
+
+if(-not $Office)
+{
+    Import-Csv $outCsvFilePath | ConvertTo-Html | Where-Object {
         $_ -notmatch "<td>OK</td>"
-    } | % {
+    } | ForEach-Object {
         $_ -replace "<table>", "<table border=`"1`" style=`"border-collapse: collapse`">" `
            -replace "</td>", "</td>`n" `
            -replace "C:\\(\S+)`.png</td>", "<a href=`"C:\`$1`.png`"><img src=`"C:\`$1`.png`" width=`"300`"></a></td>" `
     } | Out-File $outHtmlFilePath -Encoding utf8
 
-$csvObj = Import-Csv $outCsvFilePath
-$csvObj | Select-Object * -ExcludeProperty Image* |
-    Export-Csv $outCsvFilePath -Encoding UTF8 -NoTypeInformation
+    $csvObj = Import-Csv $outCsvFilePath
+    $csvObj | Select-Object * -ExcludeProperty Image* |
+        Export-Csv $outCsvFilePath -Encoding UTF8 -NoTypeInformation
 
-$endTime = Get-Date
-Write-Host ("Start: {0}" -f $startTime)
-Write-Host ("End: {0}" -f $endTime)
-Write-Host ("Total: {0}" -f ($endTime - $startTime))
+    $endTime = Get-Date
+    Write-Host ("Start: {0}" -f $startTime)
+    Write-Host ("End: {0}" -f $endTime)
+    Write-Host ("Total: {0}" -f ($endTime - $startTime))
+}
 
 
