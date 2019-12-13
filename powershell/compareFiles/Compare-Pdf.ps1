@@ -23,9 +23,9 @@ PS> .\Compare-Pdf.ps1 .\before .\after
 
 param(
     [parameter(mandatory)]
-    [string]$beforeDir,
+    [string[]]$beforeFiles,
     [parameter(mandatory)]
-    [string]$afterDir,
+    [string[]]$afterFiles,
     [switch]$Office
 )
 
@@ -44,6 +44,9 @@ if(-not $Office)
     $outHtmlFilePath = Join-Path $PSScriptRoot ("result_NG_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".html")
     $script:count = 0
 }
+$beforeDir = [string](Split-Path -Parent $beforeFiles[0])
+$afterDir = [string](Split-Path -Parent $afterFiles[0])
+
 
 function Convert-PdfToPng
 {
@@ -55,23 +58,26 @@ function Convert-PdfToPng
     )
 
     mkdir $OutDir -Force | Out-Null
-    Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} to image..." -f (Get-Date), $Path)
+    #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} to image..." -f (Get-Date), $Path)
+    Add-Message ("converting {0} to image..." -f $Path) $outLogFilePath
     # convert -quiet -density $imDensity -alpha off $Path (Join-Path $OutDir "image.png")
     magick convert -quiet -colorspace rgb -density $imDensity -alpha remove -background white $Path (Join-Path $OutDir "image.png")
-    Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {0} is finished." -f (Get-Date), $Path)
+    #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} is finished." -f (Get-Date), $Path)
+    Add-Message ("converting {0} is finished." -f $Path) $outLogFilePath
     Write-Host ""
 }
 
 function Compare-Pdf
 {
     param(
-        [parameter(Mandatory, ValueFromPipeline)]
+        [parameter(Mandatory, position=0, ValueFromPipeline)]
         [string]$Pdf
     )
 
     process
     {
         # skip if target PDF doesn't exist in the opposite dir
+
         if (! (Test-Path (Join-Path $afterDir $Pdf))) { return }
         
         $before_dir = Join-Path $outputDir $Pdf | Join-Path -ChildPath "before"
@@ -87,6 +93,8 @@ function Compare-Pdf
         # compare images and analyze the difference
         $arrayResult = @()
         $page = 0
+        if($Office) { $Pdf = $Pdf -replace ".pdf$", "" } 
+        Add-Message ("comparing {0} ..." -f $Pdf) $outLogFilePath
         Get-ChildItem $before_dir | Sort-Object -Property LastWriteTime | ForEach-Object {
             $png = $_.Name
             magick composite -quiet -compose difference (Join-Path $before_dir $png) `
@@ -105,8 +113,8 @@ function Compare-Pdf
                 $imageAfterPath = ""
                 $imageDiffPath = ""
             }
-            if($Office) { $Pdf = $Pdf -replace ".pdf$", "" } 
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1}/{2}: {3}({4})" -f (Get-Date), $Pdf, $png, $result, $identify)
+            #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1}/{2}: {3}({4})" -f (Get-Date), $Pdf, $png, $result, $identify)
+            Add-Message ("  {0}/{1}: {2}({3})" -f $Pdf, $png, $result, $identify) $outLogFilePath
             $objectOfEachRecord = [pscustomobject]@{
                 "No."=$script:count
                 FileName=$Pdf
@@ -132,7 +140,7 @@ if(-not $Office)
     $startTime = Get-Date
 }
 
-Get-ChildItem $beforeDir -Include *.pdf -Name | Compare-Pdf
+Get-ChildItem $beforeFiles -Name | Compare-Pdf
 
 if(-not $Office)
 {

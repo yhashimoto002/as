@@ -2,8 +2,27 @@
     [parameter(mandatory)]
     [string]$beforeDir,
     [parameter(mandatory)]
-    [string]$afterDir
+    [string]$afterDir,
+    [switch]$Office
 )
+
+## change if needed
+# set the threshold of differency
+# the smaller the difference, the value is close to 0.
+#$identifyThreshold = "1000"
+
+
+## don't change
+$docRegex = "^.*`.(doc|docx|docm|dot|dotx|dotm)$"
+$script:pdfArray = @()
+
+if(-not $Office)
+{
+    $outCsvFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
+    $outHtmlFilePath = Join-Path $PSScriptRoot ("result_NG_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".html")
+    $outFilePathOfConvertOffice = Join-Path $PSScriptRoot ("result_convert_office_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
+    $script:count = 0
+}
 
 
 function Convert-WordToPdf
@@ -39,7 +58,8 @@ function Convert-WordToPdf
             $wordApplication = New-Object -ComObject Word.Application
             $wordApplication.Visible = $false
 
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} opening {1} ..." -f (Get-Date), $wordFilePath)
+            # DEBUG
+            # Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} opening {1} ..." -f (Get-Date), $wordFilePath)
             # https://docs.microsoft.com/ja-jp/dotnet/api/microsoft.office.interop.word.documents.opennorepairdialog?view=word-pia
             $documents = $wordApplication.Documents.OpenNoRepairDialog($wordFilePath, #FileName
                                                                         $false,       #ConfirmConversions
@@ -50,6 +70,7 @@ function Convert-WordToPdf
             Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} to Pdf ..." -f (Get-Date), $wordFilePath)
             # https://docs.microsoft.com/ja-jp/dotnet/api/microsoft.office.interop.word._document.exportasfixedformat?view=word-pia
             $documents.ExportAsFixedFormat($pdfFilePath, [Microsoft.Office.Interop.Word.WdExportFormat]::wdExportFormatPDF)
+            $script:pdfArray += $pdfFilePath
             Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1} is successfully converted to PDF." -f (Get-Date), $wordFilePath)
             $result = "OK"
         }
@@ -78,12 +99,28 @@ function Convert-WordToPdf
         finally
         {
             # closing
-            #if ($documents) { $documents.Close() }
-            # https://docs.microsoft.com/ja-jp/dotnet/api/microsoft.office.interop.word.documents.close?view=word-pia
-            if ($documents) { $documents.Close([Microsoft.Office.Interop.Word.WdSaveOptions]::wdDoNotSaveChanges) }
-            $wordApplication.Quit()
-            $documents = $wordApplication = $null
-            [GC]::Collect()
+            if (Test-Path Variable:documents)
+            {
+                # https://docs.microsoft.com/ja-jp/dotnet/api/microsoft.office.interop.word.documents.close?view=word-pia
+                $documents.Close([Microsoft.Office.Interop.Word.WdSaveOptions]::wdDoNotSaveChanges)
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($documents) | Out-Null
+                $documents = $null
+                Remove-Variable documents -ErrorAction SilentlyContinue
+                [GC]::Collect | Out-Null
+                [GC]::WaitForPendingFinalizers() | Out-Null
+                [GC]::Collect | Out-Null
+            }
+
+            if (Test-Path Variable:wordApplication)
+            {
+                $wordApplication.Quit()
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($wordApplication) | Out-Null
+                $wordApplication = $null
+                Remove-Variable wordApplication -ErrorAction SilentlyContinue
+                [GC]::Collect | Out-Null
+                [GC]::WaitForPendingFinalizers() | Out-Null
+                [GC]::Collect | Out-Null
+            }
 
             # export to csv
             $arrayResult = @()
@@ -108,32 +145,37 @@ function Convert-WordToPdf
 
 
 # main
-$startTime = Get-Date
-
-$outFilePathOfConvertOffice = Join-Path $PSScriptRoot ("result_convert_office_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
-if (Test-Path $outFilePathOfConvertOffice)
+if(-not $Office)
 {
-    try
-    {
-        Remove-Item $outFilePath -ErrorAction Stop
-    }
-    catch
-    {
-        Write-Error ("Error: {0}" -f $_.Exception.Message)
-        exit 1
-    }
+    $startTime = Get-Date
 }
 
-$docRegex = "^.*`.(doc|docx|docm|dot|dotx|dotm)$"
-dir $beforeDir | ? { $_.FullName -match $docRegex } | Convert-WordToPdf
-dir $afterDir | ? { $_.FullName -match $docRegex } | Convert-WordToPdf
+Get-ChildItem $beforeDir | Where-Object { $_.Name -match $docRegex } | Convert-WordToPdf
+$beforeFiles = $script:pdfArray
+if(-not $beforeFiles) { return }
+$script:pdfArray = @()
+Get-ChildItem $afterDir | Where-Object { $_.Name -match $docRegex } | Convert-WordToPdf
+$afterFiles = $script:pdfArray
+. ".\Compare-Pdf.ps1" -beforeFiles $beforeFiles -afterFiles $afterFiles -Office
 
 
-# compare images and analyze the difference
-. ".\Compare-Pdf.ps1" -beforeDir $beforeDir -afterDir $afterDir
+if(-not $Office)
+{
+    Import-Csv $outCsvFilePath | ConvertTo-Html | Where-Object {
+        $_ -notmatch "<td>OK</td>"
+    } | ForEach-Object {
+        $_ -replace "<table>", "<table border=`"1`" style=`"border-collapse: collapse`">" `
+           -replace "</td>", "</td>`n" `
+           -replace "C:\\(\S+)`.png</td>", "<a href=`"C:\`$1`.png`"><img src=`"C:\`$1`.png`" width=`"300`"></a></td>" `
+    } | Out-File $outHtmlFilePath -Encoding utf8
 
-$endTime = Get-Date
-Write-Host ("Start: {0}" -f $startTime)
-Write-Host ("End: {0}" -f $endTime)
-Write-Host ("Total: {0}" -f ($endTime - $startTime))
+    $csvObj = Import-Csv $outCsvFilePath
+    $csvObj | Select-Object * -ExcludeProperty Image* |
+        Export-Csv $outCsvFilePath -Encoding UTF8 -NoTypeInformation
+
+    $endTime = Get-Date
+    Write-Host ("Start: {0}" -f $startTime)
+    Write-Host ("End: {0}" -f $endTime)
+    Write-Host ("Total: {0}" -f ($endTime - $startTime))
+}
 

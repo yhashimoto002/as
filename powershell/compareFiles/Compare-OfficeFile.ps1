@@ -5,7 +5,28 @@
     [string]$afterDir
 )
 
+## change if needed
+# set the threshold of differency
+# the smaller the difference, the value is close to 0.
+$identifyThreshold = "1000"
 
+
+## don't change
+$docRegex = "^.*`.(doc|docx|docm|dot|dotx|dotm)$"
+$excelRegex = "^.*`.(xls|xlsx|xlsm|xlt|xltx|xltm)$"
+$powerpointRegex = "^.*`.(ppt|pptx|pptm|pot|potx|potm|pps|ppsx|ppsm)$"
+
+$outputDir = Join-Path $PSScriptRoot "output"
+$outCsvFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
+$outLogFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".log")
+$outHtmlFilePath = Join-Path $PSScriptRoot ("result_NG_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".html")
+$outFilePathOfConvertOffice = Join-Path $PSScriptRoot ("result_convert_office_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
+$script:count = 0
+
+# load function
+. ".\Add-Message.ps1"
+
+<#
 function Convert-WordToPdf
 {
     param(
@@ -39,7 +60,8 @@ function Convert-WordToPdf
             $wordApplication = New-Object -ComObject Word.Application
             $wordApplication.Visible = $false
 
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} opening {1} ..." -f (Get-Date), $wordFilePath)
+            # DEBUG
+            # Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} opening {1} ..." -f (Get-Date), $wordFilePath)
             # https://docs.microsoft.com/ja-jp/dotnet/api/microsoft.office.interop.word.documents.opennorepairdialog?view=word-pia
             $documents = $wordApplication.Documents.OpenNoRepairDialog($wordFilePath, #FileName
                                                                         $false,       #ConfirmConversions
@@ -78,12 +100,28 @@ function Convert-WordToPdf
         finally
         {
             # closing
-            #if ($documents) { $documents.Close() }
-            # https://docs.microsoft.com/ja-jp/dotnet/api/microsoft.office.interop.word.documents.close?view=word-pia
-            if ($documents) { $documents.Close([Microsoft.Office.Interop.Word.WdSaveOptions]::wdDoNotSaveChanges) }
-            $wordApplication.Quit()
-            $documents = $wordApplication = $null
-            [GC]::Collect()
+            if (Test-Path Variable:documents)
+            {
+                # https://docs.microsoft.com/ja-jp/dotnet/api/microsoft.office.interop.word.documents.close?view=word-pia
+                $documents.Close([Microsoft.Office.Interop.Word.WdSaveOptions]::wdDoNotSaveChanges)
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($documents) | Out-Null
+                $documents = $null
+                Remove-Variable documents -ErrorAction SilentlyContinue
+                [GC]::Collect | Out-Null
+                [GC]::WaitForPendingFinalizers() | Out-Null
+                [GC]::Collect | Out-Null
+            }
+
+            if (Test-Path Variable:wordApplication)
+            {
+                $wordApplication.Quit()
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($wordApplication) | Out-Null
+                $wordApplication = $null
+                Remove-Variable wordApplication -ErrorAction SilentlyContinue
+                [GC]::Collect | Out-Null
+                [GC]::WaitForPendingFinalizers() | Out-Null
+                [GC]::Collect | Out-Null
+            }
 
             # export to csv
             $arrayResult = @()
@@ -105,108 +143,10 @@ function Convert-WordToPdf
     }
 
 }
+#>
 
 
-function Convert-ExcelToPdf
-{
-    param(
-        [parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [Alias('FullName')]
-        [string]$Path,
-        [parameter()]
-        [string]$OutDir
-    )
-
-    begin
-    {
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} START converting Word to PDF" -f (Get-Date))
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} ------------------------------" -f (Get-Date))
-    }
-
-    process
-    {
-        $excelFilePath = [string](Resolve-Path $Path)
-        $outDirFullPath = [string](Resolve-Path (Split-Path -Parent $Path))
-        if ($OutDir)
-        {
-            $outDirFullPath = [string](Resolve-Path $outDir)
-        }
-        $pdfFilePath = [string]((Join-Path $outDirFullPath (Split-Path -Leaf $Path)) + ".pdf")
-        $result = ""
-        $errMessage = ""
-
-        try
-        {
-            $excelApplication = New-Object -ComObject Excel.Application
-            $excelApplication.Visible = $false
-
-            #$workbooks = $excelApplication.Workbooks.OpenNoRepairDialog($excelFilePath)
-            # https://docs.microsoft.com/ja-jp/office/vba/api/excel.workbooks.open
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} opening {1} ..." -f (Get-Date), $excelFilePath)
-            $workbooks = $excelApplication.Workbooks.Open($excelFilePath,    #FileName
-                                                            $false,          #UpdateLinks
-                                                            $true,           #ReadOnly
-                                                            [Type]::Missing, #Format
-                                                            "xxxxx")         #Password
-
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} to PDF ..." -f (Get-Date), $excelFilePath)
-            # https://docs.microsoft.com/ja-jp/dotnet/api/microsoft.office.tools.excel.worksheet.exportasfixedformat?view=vsto-2017
-            $workbooks.ExportAsFixedFormat([Microsoft.Office.Interop.Excel.xlFixedFormatType]::xlTypePDF, $pdfFilePath)
-            $workbooks.Saved = $true
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1} is successfully converted to PDF." -f (Get-Date), $excelFilePath)
-            $result = "OK"
-        }
-        catch
-        {
-            if ($_.Exception.Message -match "入力したパスワードが間違っています")
-            {
-                $errMessage = "パスワード保護"
-            }
-            elseif ($_.Exception.Message -match "ファイルが壊れている可能性があります")
-            {
-                $errMessage = "ファイル破損"
-            }
-            elseif ($_.Exception.Message -match "ファイル形式がファイル拡張子と一致していない")
-            {
-                $errMessage = "拡張子不一致"
-            }
-            else
-            {
-                $errMessage = "Error: {0}" -f $_.Exception.Message
-            }
-            $result = "NG"
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1} is failed to convert. ({2})" -f (Get-Date), $excelFilePath, $errMessage)
-        }
-        finally
-        {
-            # closing
-            if ($workbooks) { $workbooks.Close($false) }
-            $excelApplication.Quit()
-            $workbooks = $excelApplication = $null
-            [GC]::Collect()
-
-            # export to csv
-            $arrayResult = @()
-            $objectOfEachRecord = [pscustomobject]@{
-                FileName=$excelFilePath
-                Result=$result
-                Error=$errMessage
-            }
-            $arrayResult += $objectOfEachRecord
-            $arrayResult | Export-Csv $outFilePathOfConvertOffice  -encoding Default -NoTypeInformation -Append
-            Write-Host ""
-        }
-    }
-
-    end
-    {
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} FINISHED converting Word to PDF" -f (Get-Date))
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} ------------------------------" -f (Get-Date))
-    }
-
-}
-
-
+<#
 function Convert-PowerPointToPng
 {
     param(
@@ -226,6 +166,9 @@ function Convert-PowerPointToPng
     {
         $powerpointFullPath = Resolve-Path $Path
         if (-not (Test-Path $OutDir)) { mkdir $OutDir -Force | Out-Null }
+        $result = ""
+        $errMessage = ""
+
         try
         {
             try
@@ -251,6 +194,7 @@ function Convert-PowerPointToPng
             $presentations.SaveAs($OutDir, [Microsoft.Office.Interop.PowerPoint.PpSaveAsFileType]::ppSaveAsPNG)
             $presentations.Saved = $true
             Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1} is successfully converted to PNG." -f (Get-Date), $powerpointFullPath)
+            $result = "OK"
         }
         catch
         {
@@ -266,17 +210,34 @@ function Convert-PowerPointToPng
             {
                 $errMessage = "Error: {0}" -f $_.Exception.Message
             }
+            $result = "NG"
             Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1} is failed to convert. ({2})" -f (Get-Date), $powerpointFullPath, $errMessage)
         }
         finally
         {
             # closing
-            if ($presentations) { $presentations.Close() }
-            if ($powerpointApplication) { $powerpointApplication.Quit() }
-            $presentations = $powerpointApplication = $null
-            [void][GC]::Collect
-            [void][GC]::WaitForPendingFinalizers()
-            [void][GC]::Collect
+            # https://qiita.com/mima_ita/items/aa811423d8c4410eca71
+            if (Test-Path Variable:presentations)
+            {
+                $presentations.Close()
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($presentations) | Out-Null
+                $presentations = $null
+                Remove-Variable presentations -ErrorAction SilentlyContinue
+                [GC]::Collect | Out-Null
+                [GC]::WaitForPendingFinalizers() | Out-Null
+                [GC]::Collect | Out-Null
+            }
+
+            if (Test-Path Variable:powerpointApplication)
+            {
+                $powerpointApplication.Quit()
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($powerpointApplication) | Out-Null
+                $powerpointApplication = $null
+                Remove-Variable powerpointApplication -ErrorAction SilentlyContinue
+                [GC]::Collect | Out-Null
+                [GC]::WaitForPendingFinalizers() | Out-Null
+                [GC]::Collect | Out-Null
+            }
 
             # export to csv
             $arrayResult = @()
@@ -298,12 +259,11 @@ function Convert-PowerPointToPng
     }
 }
 
-
 function Compare-PowerPoint
 {
     param(
         [parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [Alias('FullName')]
+        [Alias('Name')]
         [string]$PowerPoint
     )
 
@@ -318,7 +278,7 @@ function Compare-PowerPoint
         mkdir $diff_dir -Force | Out-Null
 
         # convert pdf to image
-        Write-Host ("{0}" -f ++$count)
+        Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1}" -f (Get-Date), ++$script:count)
         Convert-PowerPointToPng -Path (Join-Path $beforeDir $PowerPoint) -OutDir $before_dir
         Convert-PowerPointToPng -Path (Join-Path $afterDir $PowerPoint) -OutDir $after_dir
 
@@ -343,9 +303,9 @@ function Compare-PowerPoint
                 $imageAfterPath = ""
                 $imageDiffPath = ""
             }
-            Write-Host ("{0}/{1}: {2}({3})" -f $PowerPoint, $png, $result, $identify) 
+            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1}/{2}: {3}({4})" -f (Get-Date), $PowerPoint, $png, $result, $identify) 
             $objectOfEachRecord = [pscustomobject]@{
-                "No."=$count
+                "No."=$script:count
                 FileName=$PowerPoint
                 ImageName=$png
                 Page=++$page
@@ -361,55 +321,51 @@ function Compare-PowerPoint
         Write-Host "------------------------------"
     }
 }
-
+#>
 
 # main
 $startTime = Get-Date
 
-$outFilePathOfConvertOffice = Join-Path $PSScriptRoot ("result_convert_office_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
-if (Test-Path $outFilePathOfConvertOffice)
-{
-    try
-    {
-        Remove-Item $outFilePath -ErrorAction Stop
-    }
-    catch
-    {
-        Write-Error ("Error: {0}" -f $_.Exception.Message)
-        exit 1
-    }
-}
-
-
-$docRegex = "^.*`.(doc|docx|docm|dot|dotx|dotm)$"
-$excelRegex = "^.*`.(xls|xlsx|xlsm|xlt|xltx|xltm)$"
-$powerpointRegex = "^.*`.(ppt|pptx|pptm|pot|potx|potm|pps|ppsx|ppsm)$"
-#Get-ChildItem $beforeDir | ? { $_.FullName -match $docRegex } | Convert-WordToPdf
-#Get-ChildItem $beforeDir | ? { $_.FullName -match $excelRegex } | Convert-ExcelToPdf
-#Get-ChildItem $afterDir | ? { $_.FullName -match $docRegex } | Convert-WordToPdf
-#Get-ChildItem $afterDir | ? { $_.FullName -match $excelRegex } | Convert-ExcelToPdf
-#Get-ChildItem $beforeDir | ? { $_.Name -match $powerpointRegex } | Compare-PowerPoint
-
-
+# convert Excel and Word to PDF
+<#
 foreach($file in Get-ChildItem $beforeDir)
 {
     if($file.FullName -match $docRegex) { Convert-WordToPdf $file.FullName }
     if($file.FullName -match $excelRegex) { Convert-ExcelToPdf $file.FullName }
-    if($file.FullName -match $powerpointRegex) { Compare-PowerPoint $file.FullName }
 }
 
 foreach($file in Get-ChildItem $afterDir)
 {
     if($file.FullName -match $docRegex) { Convert-WordToPdf $file.FullName }
     if($file.FullName -match $excelRegex) { Convert-ExcelToPdf $file.FullName }
-    if($file.FullName -match $powerpointRegex) { Compare-PowerPoint $file.FullName }
 }
+#>
 
-# compare images and analyze the difference
-. ".\Compare-Pdf.ps1" -beforeDir $beforeDir -afterDir $afterDir
+# compare
+. ".\Compare-Word.ps1" -beforeDir  $beforeDir -afterDir $afterDir -Office
+. ".\Compare-Excel.ps1" -beforeDir  $beforeDir -afterDir $afterDir -Office
+. ".\Compare-PowerPoint.ps1" -beforeDir $beforeDir -afterDir $afterDir -Office
+#Get-ChildItem $beforeDir | Where-Object { $_.Name -match $powerpointRegex } | Compare-PowerPoint
+
+# compare PDFs and analyze the difference
+#. ".\Compare-Pdf.ps1" -beforeDir $beforeDir -afterDir $afterDir -Office
+
+
+Import-Csv $outCsvFilePath | ConvertTo-Html | Where-Object {
+    $_ -notmatch "<td>OK</td>"
+} | ForEach-Object {
+    $_ -replace "<table>", "<table border=`"1`" style=`"border-collapse: collapse`">" `
+       -replace "</td>", "</td>`n" `
+       -replace "C:\\(\S+)`.png</td>", "<a href=`"C:\`$1`.png`"><img src=`"C:\`$1`.png`" width=`"300`"></a></td>" `
+} | Out-File $outHtmlFilePath -Encoding utf8
+
+$csvObj = Import-Csv $outCsvFilePath
+$csvObj | Select-Object * -ExcludeProperty Image* |
+Export-Csv $outCsvFilePath -Encoding UTF8 -NoTypeInformation
+
 
 $endTime = Get-Date
-Write-Host ("Start: {0}" -f $startTime)
-Write-Host ("End: {0}" -f $endTime)
-Write-Host ("Total: {0}" -f ($endTime - $startTime))
-
+Write-Host ("StartTime: {0}" -f $startTime)
+Write-Host ("EndTime: {0}" -f $endTime)
+Write-Host ("TotalTime: {0}" -f ($endTime - $startTime))
+Write-Host ("TotalCount: {0}" -f $script:count)
