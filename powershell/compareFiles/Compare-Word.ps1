@@ -1,4 +1,23 @@
-﻿param(
+﻿<#
+.SYNOPSIS
+
+Compare two Word files groups and output the difference.
+
+.PARAMETER beforeDir
+
+Directory path including Word files before sanitizing
+
+.PARAMETER afterDir
+
+Directory path including Word files after sanitizing
+
+.EXAMPLE
+
+PS> .\Compare-Word.ps1 .\before .\after
+#>
+
+[CmdletBinding()]
+param(
     [parameter(mandatory)]
     [string]$beforeDir,
     [parameter(mandatory)]
@@ -6,22 +25,20 @@
     [switch]$Office
 )
 
-## change if needed
-# set the threshold of differency
-# the smaller the difference, the value is close to 0.
-#$identifyThreshold = "1000"
-
-
 ## don't change
 $docRegex = "^.*`.(doc|docx|docm|dot|dotx|dotm)$"
 $script:pdfArray = @()
 
 if(-not $Office)
 {
+    $script:outputDir = Join-Path $PSScriptRoot "output"
     $outCsvFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
+    $outLogFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".log")
     $outHtmlFilePath = Join-Path $PSScriptRoot ("result_NG_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".html")
     $outFilePathOfConvertOffice = Join-Path $PSScriptRoot ("result_convert_office_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
     $script:count = 0
+    # load function
+    . ".\Add-Message.ps1"
 }
 
 
@@ -34,12 +51,6 @@ function Convert-WordToPdf
         [parameter()]
         [string]$OutDir
     )
-
-    begin
-    {
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} START converting Word to PDF" -f (Get-Date))
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} ------------------------------" -f (Get-Date))
-    }
 
     process
     {
@@ -67,16 +78,15 @@ function Convert-WordToPdf
                                                                         $false,       #AddToRecentFiles
                                                                         "xxxxxx")     #PasswordDocument
            
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} to Pdf ..." -f (Get-Date), $wordFilePath)
+            Add-Message ("converting {0} to Pdf ..." -f $wordFilePath)  $outLogFilePath
             # https://docs.microsoft.com/ja-jp/dotnet/api/microsoft.office.interop.word._document.exportasfixedformat?view=word-pia
             $documents.ExportAsFixedFormat($pdfFilePath, [Microsoft.Office.Interop.Word.WdExportFormat]::wdExportFormatPDF)
             $script:pdfArray += $pdfFilePath
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1} is successfully converted to PDF." -f (Get-Date), $wordFilePath)
+            Add-Message ("converting {0} is finished." -f $wordFilePath)  $outLogFilePath
             $result = "OK"
         }
         catch
         {
-            #Write-Error ("Error: {0}" -f $_.Exception.Message)
             if ($_.Exception.Message -match "パスワードが正しくありません")
             {
                 $errMessage = "パスワード保護"
@@ -91,10 +101,10 @@ function Convert-WordToPdf
             }
             else
             {
-                $errMessage = "Error: {0}" -f $_.Exception.Message
+                $errMessage = "不明"
             }
             $result = "NG"
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1} is failed to convert. ({2})" -f (Get-Date), $wordFilePath, $errMessage)
+            Add-Message ("{0} is failed to convert. ({1})`nERROR: {2}" -f $wordFilePath, $errMessage, $_.Exception)  $outLogFilePath
         }
         finally
         {
@@ -135,12 +145,6 @@ function Convert-WordToPdf
         }
     }
 
-    end
-    {
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} FINISHED converting Word to PDF" -f (Get-Date))
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} ------------------------------" -f (Get-Date))
-    }
-
 }
 
 
@@ -150,15 +154,18 @@ if(-not $Office)
     $startTime = Get-Date
 }
 
+
+# compare
 Get-ChildItem $beforeDir | Where-Object { $_.Name -match $docRegex } | Convert-WordToPdf
 $beforeFiles = $script:pdfArray
 if(-not $beforeFiles) { return }
 $script:pdfArray = @()
 Get-ChildItem $afterDir | Where-Object { $_.Name -match $docRegex } | Convert-WordToPdf
 $afterFiles = $script:pdfArray
-. ".\Compare-Pdf.ps1" -beforeFiles $beforeFiles -afterFiles $afterFiles -Office
+. ".\Compare-Pdf.ps1" -beforeFiles $beforeFiles -afterFiles $afterFiles -Word
 
 
+# report
 if(-not $Office)
 {
     Import-Csv $outCsvFilePath | ConvertTo-Html | Where-Object {
@@ -177,5 +184,6 @@ if(-not $Office)
     Write-Host ("Start: {0}" -f $startTime)
     Write-Host ("End: {0}" -f $endTime)
     Write-Host ("Total: {0}" -f ($endTime - $startTime))
+    Write-Host ("TotalCount: {0}" -f $script:count)
 }
 

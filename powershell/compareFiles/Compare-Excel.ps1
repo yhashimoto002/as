@@ -1,4 +1,23 @@
-﻿param(
+﻿<#
+.SYNOPSIS
+
+Compare two Excel files groups and output the difference.
+
+.PARAMETER beforeDir
+
+Directory path including Excel files before sanitizing
+
+.PARAMETER afterDir
+
+Directory path including Excel files after sanitizing
+
+.EXAMPLE
+
+PS> .\Compare-Excel.ps1 .\before .\after
+#>
+
+[CmdletBinding()]
+param(
     [parameter(mandatory)]
     [string]$beforeDir,
     [parameter(mandatory)]
@@ -6,22 +25,20 @@
     [switch]$Office
 )
 
-## change if needed
-# set the threshold of differency
-# the smaller the difference, the value is close to 0.
-#$identifyThreshold = "1000"
-
-
 ## don't change
 $excelRegex = "^.*`.(xls|xlsx|xlsm|xlt|xltx|xltm)$"
 $script:pdfArray = @()
 
 if(-not $Office)
 {
+    $script:outputDir = Join-Path $PSScriptRoot "output"
     $outCsvFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
+    $outLogFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".log")
     $outHtmlFilePath = Join-Path $PSScriptRoot ("result_NG_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".html")
     $outFilePathOfConvertOffice = Join-Path $PSScriptRoot ("result_convert_office_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
     $script:count = 0
+    # load function
+    . ".\Add-Message.ps1"
 }
 
 
@@ -34,12 +51,6 @@ function Convert-ExcelToPdf
         [parameter()]
         [string]$OutDir
     )
-    
-    begin
-    {
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} START converting Word to PDF" -f (Get-Date))
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} ------------------------------" -f (Get-Date))
-    }
     
     process
     {
@@ -67,13 +78,11 @@ function Convert-ExcelToPdf
                                                             [Type]::Missing, #Format
                                                             "xxxxx")         #Password
     
-            #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} to PDF ..." -f (Get-Date), $excelFilePath)
             Add-Message ("converting {0} to PDF ..." -f $excelFilePath) $outLogFilePath
             # https://docs.microsoft.com/ja-jp/dotnet/api/microsoft.office.tools.excel.worksheet.exportasfixedformat?view=vsto-2017
             $workbooks.ExportAsFixedFormat([Microsoft.Office.Interop.Excel.xlFixedFormatType]::xlTypePDF, $pdfFilePath)
             $workbooks.Saved = $true
             $script:pdfArray += $pdfFilePath
-            #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} is finished." -f (Get-Date), $excelFilePath)
             Add-Message ("converting {0} is finished." -f $excelFilePath) $outLogFilePath
             $result = "OK"
         }
@@ -93,11 +102,11 @@ function Convert-ExcelToPdf
             }
             else
             {
-                $errMessage = "Error: {0}" -f $_.Exception.Message
+                #$errMessage = "Error: {0}" -f $_.Exception.Message
+                $errMessage = "不明"
             }
             $result = "NG"
-            #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1} is failed to convert. ({2})" -f (Get-Date), $excelFilePath, $errMessage)
-            Add-Message ("{0} is failed to convert. ({1})" -f $excelFilePath, $errMessage) $outLogFilePath
+            Add-Message ("{0} is failed to convert. ({1})`nERROR: {2}" -f $excelFilePath, $errMessage, $_.Exception) $outLogFilePath
         }
         finally
         {
@@ -137,13 +146,6 @@ function Convert-ExcelToPdf
         }
     }
     
-    end
-    {
-
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} FINISHED converting Word to PDF" -f (Get-Date))
-        #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} ------------------------------" -f (Get-Date))
-    }
-    
 }
 
 
@@ -153,14 +155,18 @@ if(-not $Office)
     $startTime = Get-Date
 }
 
+
+# compare
 Get-ChildItem $beforeDir | Where-Object { $_.Name -match $excelRegex } | Convert-ExcelToPdf
 $beforeFiles = $script:pdfArray
+if(-not $beforeFiles) { return }
 $script:pdfArray = @()
 Get-ChildItem $afterDir | Where-Object { $_.Name -match $excelRegex } | Convert-ExcelToPdf
 $afterFiles = $script:pdfArray
-. ".\Compare-Pdf.ps1" -beforeFiles $beforeFiles -afterFiles $afterFiles -Office
+. ".\Compare-Pdf.ps1" -beforeFiles $beforeFiles -afterFiles $afterFiles -Excel
 
 
+# report
 if(-not $Office)
 {
     Import-Csv $outCsvFilePath | ConvertTo-Html | Where-Object {
@@ -179,5 +185,5 @@ if(-not $Office)
     Write-Host ("Start: {0}" -f $startTime)
     Write-Host ("End: {0}" -f $endTime)
     Write-Host ("Total: {0}" -f ($endTime - $startTime))
+    Write-Host ("TotalCount: {0}" -f $script:count)
 }
-
