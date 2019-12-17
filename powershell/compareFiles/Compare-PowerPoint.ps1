@@ -1,4 +1,22 @@
-﻿
+﻿<#
+.SYNOPSIS
+
+Compare two PowerPoint files groups and output the difference.
+
+.PARAMETER beforeDir
+
+Directory path including PowerPoint files before sanitizing
+
+.PARAMETER afterDir
+
+Directory path including PowerPoint files after sanitizing
+
+.EXAMPLE
+
+PS> .\Compare-PowerPoint.ps1 .\before .\after
+#>
+
+[CmdletBinding()]
 param(
     [parameter(mandatory)]
     [string]$beforeDir,
@@ -7,10 +25,10 @@ param(
     [switch]$Office
 )
 
-## change if needed
-# set the threshold of differency
-# the smaller the difference, the value is close to 0.
-$identifyThreshold = "1000"
+# load config
+$conf = Get-Content (Join-Path $PSScriptRoot "settings.ini") | Where-Object { $_ -match "=" } | ConvertFrom-StringData
+#$imDensity = $conf.imDensity
+$identifyThreshold = $conf.identifyThreshold
 
 ## don't change
 $powerpointRegex = "^.*`.(ppt|pptx|pptm|pot|potx|potm|pps|ppsx|ppsm)$"
@@ -19,9 +37,12 @@ if(-not $Office)
 {
     $outputDir = Join-Path $PSScriptRoot "output"
     $outCsvFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
+    $outLogFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".log")
     $outHtmlFilePath = Join-Path $PSScriptRoot ("result_NG_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".html")
     $outFilePathOfConvertOffice = Join-Path $PSScriptRoot ("result_convert_office_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
     $script:count = 0
+    # load function
+    . ".\Add-Message.ps1"
 }
 
 
@@ -41,30 +62,24 @@ function Convert-PowerPointToPng
 
     try
     {
-        try
-        {
-            $powerpointApplication = New-Object -ComObject PowerPoint.Application
-        }
-        catch
-        {
-            Write-Host ("cannot create com object: {0}" -f $_.Exception)
-        }
+        $powerpointApplication = New-Object -ComObject PowerPoint.Application
         #$powerpointApplication.Visible = [Microsoft.Office.Core.MsoTriState]::msoTrue
 
         # DEBUG
         # Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} opening {1} ..." -f (Get-Date), $powerpointFullPath)
         # https://docs.microsoft.com/ja-jp/previous-versions/office/developer/office-2010/ff763759%28v%3doffice.14%29
         $password = "xxxxx"
-        $presentations = $powerpointApplication.Presentations.Open([string]$powerpointFullPath+"::$password",
+        $presentations = $powerpointApplication.Presentations
+        $presentation = $presentations.Open([string]$powerpointFullPath+"::$password",
                                                                     [Microsoft.Office.Core.MsoTriState]::msoTrue,  # readonly
                                                                     [Type]::Missing,                               # untitled
                                                                     [Microsoft.Office.Core.MsoTriState]::msoFalse) # withwindow
         
-        Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} to PNG ..." -f (Get-Date), $powerpointFullPath)
+        Add-Message ("converting {0} to PNG ..." -f $powerpointFullPath) $outLogFilePath
         # https://docs.microsoft.com/en-us/previous-versions/office/developer/office-2010/ff762466%28v%3doffice.14%29
-        $presentations.SaveAs($OutDir, [Microsoft.Office.Interop.PowerPoint.PpSaveAsFileType]::ppSaveAsPNG)
-        $presentations.Saved = $true
-        Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1} is successfully converted to PNG." -f (Get-Date), $powerpointFullPath)
+        $presentation.SaveAs($OutDir, [Microsoft.Office.Interop.PowerPoint.PpSaveAsFileType]::ppSaveAsPNG)
+        #$presentation.Saved = [Microsoft.Office.Core.MsoTriState]::msoTrue
+        Add-Message ("converting {0} is finished." -f $powerpointFullPath) $outLogFilePath
         $result = "OK"
     }
     catch
@@ -73,26 +88,35 @@ function Convert-PowerPointToPng
         {
             $errMessage = "パスワード保護"
         }
-        #elseif ($_.Exception.Message -match "HRESULT")
-        elseif ($true)
+        elseif ($_.Exception.Message -match "HRESULT")
         {
             $errMessage = "ファイル破損"
         }
         else
         {
-            $errMessage = "{0}" -f $_.Exception.Message
+            $errMessage = "不明"
         }
         $result = "NG"
-        Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1} is failed to convert. ({2})" -f (Get-Date), $powerpointFullPath, $errMessage)
+        Add-Message ("{0} is failed to convert. ({1})`nERROR: {2}" -f $powerpointFullPath, $errMessage, $_.Exception) $outLogFilePath
 
     }
     finally
     {
         # closing
         # https://qiita.com/mima_ita/items/aa811423d8c4410eca71
+        if (Test-Path Variable:presentation)
+        {
+            $presentation.Close()
+            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($presentation) | Out-Null
+            $presentation = $null
+            Remove-Variable presentation -ErrorAction SilentlyContinue
+            [GC]::Collect | Out-Null
+            [GC]::WaitForPendingFinalizers() | Out-Null
+            [GC]::Collect | Out-Null
+        }
+
         if (Test-Path Variable:presentations)
         {
-            $presentations.Close()
             [System.Runtime.Interopservices.Marshal]::ReleaseComObject($presentations) | Out-Null
             $presentations = $null
             Remove-Variable presentations -ErrorAction SilentlyContinue
@@ -152,6 +176,7 @@ function Compare-PowerPoint
         # compare images and analyze the difference
         $arrayResult = @()
         $page = 0
+        Add-Message ("comparing {0} ..." -f $PowerPoint) $outLogFilePath
         Get-ChildItem $before_dir | Sort-Object -Property LastWriteTime | ForEach-Object {
             $png = $_.Name
             magick composite -quiet -compose difference (Join-Path $before_dir $png) `
@@ -170,7 +195,7 @@ function Compare-PowerPoint
                 $imageAfterPath = ""
                 $imageDiffPath = ""
             }
-            Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1}/{2}: {3}({4})" -f (Get-Date), $PowerPoint, $png, $result, $identify) 
+            Add-Message ("`t{0}/{1}: {2}({3})" -f $PowerPoint, $png, $result, $identify) $outLogFilePath
             $objectOfEachRecord = [pscustomobject]@{
                 "No."=$script:count
                 FileName=$PowerPoint
@@ -195,8 +220,15 @@ if(-not $Office)
     $startTime = Get-Date
 }
 
-Get-ChildItem $beforeDir | Where-Object { $_.Name -match $powerpointRegex } | Compare-PowerPoint
 
+# compare
+Get-ChildItem $beforeDir | Where-Object { $_.Name -match $powerpointRegex } | Compare-PowerPoint
+[GC]::WaitForPendingFinalizers() | Out-Null
+[GC]::Collect | Out-Null
+[GC]::Collect | Out-Null
+
+
+# report
 if(-not $Office)
 {
     Import-Csv $outCsvFilePath | ConvertTo-Html | Where-Object {
@@ -215,5 +247,6 @@ if(-not $Office)
     Write-Host ("Start: {0}" -f $startTime)
     Write-Host ("End: {0}" -f $endTime)
     Write-Host ("Total: {0}" -f ($endTime - $startTime))
+    Write-Host ("TotalCount: {0}" -f $script:count)
 }
 
