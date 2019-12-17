@@ -1,51 +1,62 @@
 ﻿<#
 .SYNOPSIS
 
-Compare 2 PDFs and output the difference.
+Compare two PDF files groups and output the difference.
 
 .PARAMETER beforeDir
 
-Directory path including PDFs before sanitizing
+Directory path including PDF files before sanitizing
 
 .PARAMETER afterDir
 
-Directory path including PDFs after sanitizing
-
-.OUTPUTS
-
-CSV file
+Directory path including PDF files after sanitizing
 
 .EXAMPLE
 
 PS> .\Compare-Pdf.ps1 .\before .\after
-
 #>
 
+[CmdletBinding(DefaultParameterSetName="Directory")]
 param(
-    [parameter(mandatory)]
+    [parameter(mandatory, position=0, ParameterSetName="Directory")]
+    [string]$beforeDir,
+    [parameter(mandatory, position=1, ParameterSetName="Directory")]
+    [string]$afterDir,
+    [parameter(mandatory, position=0, ParameterSetName="Files")]
     [string[]]$beforeFiles,
-    [parameter(mandatory)]
+    [parameter(mandatory, position=1, ParameterSetName="Files")]
     [string[]]$afterFiles,
-    [switch]$Office
+    [parameter(ParameterSetName="Files")]
+    [switch]$Office,
+    [parameter(ParameterSetName="Files")]
+    [switch]$Word,
+    [parameter(ParameterSetName="Files")]
+    [switch]$Excel
 )
 
-## change if needed
-# set the dpi of an image
-$imDensity = "100"
-# set the threshold of differency
-# the smaller the difference, the value is close to 0.
-$identifyThreshold = "1000"
+# load config
+$conf = Get-Content (Join-Path $PSScriptRoot "settings.ini") | Where-Object { $_ -match "=" } | ConvertFrom-StringData
+$imDensity = $conf.imDensity
+$identifyThreshold = $conf.identifyThreshold
+
 
 ## don't change
-if(-not $Office)
+if((-not $Office) -and (-not $Word) -and (-not $Excel))
 {
     $outputDir = Join-Path $PSScriptRoot "output"
     $outCsvFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
+    $outLogFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".log")
     $outHtmlFilePath = Join-Path $PSScriptRoot ("result_NG_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".html")
     $script:count = 0
+    # load function
+    . ".\Add-Message.ps1"
 }
-$beforeDir = [string](Split-Path -Parent $beforeFiles[0])
-$afterDir = [string](Split-Path -Parent $afterFiles[0])
+
+if($PSCmdlet.ParameterSetName -eq "Files")
+{
+    $beforeDir = [string](Split-Path -Parent $beforeFiles[0])
+    $afterDir = [string](Split-Path -Parent $afterFiles[0])
+}
 
 
 function Convert-PdfToPng
@@ -58,11 +69,9 @@ function Convert-PdfToPng
     )
 
     mkdir $OutDir -Force | Out-Null
-    #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} to image..." -f (Get-Date), $Path)
     Add-Message ("converting {0} to image..." -f $Path) $outLogFilePath
     # convert -quiet -density $imDensity -alpha off $Path (Join-Path $OutDir "image.png")
     magick convert -quiet -colorspace rgb -density $imDensity -alpha remove -background white $Path (Join-Path $OutDir "image.png")
-    #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} converting {1} is finished." -f (Get-Date), $Path)
     Add-Message ("converting {0} is finished." -f $Path) $outLogFilePath
     Write-Host ""
 }
@@ -77,7 +86,6 @@ function Compare-Pdf
     process
     {
         # skip if target PDF doesn't exist in the opposite dir
-
         if (! (Test-Path (Join-Path $afterDir $Pdf))) { return }
         
         $before_dir = Join-Path $outputDir $Pdf | Join-Path -ChildPath "before"
@@ -93,7 +101,7 @@ function Compare-Pdf
         # compare images and analyze the difference
         $arrayResult = @()
         $page = 0
-        if($Office) { $Pdf = $Pdf -replace ".pdf$", "" } 
+        if($Office -or $Word -or $Excel) { $Pdf = $Pdf -replace ".pdf$", "" } 
         Add-Message ("comparing {0} ..." -f $Pdf) $outLogFilePath
         Get-ChildItem $before_dir | Sort-Object -Property LastWriteTime | ForEach-Object {
             $png = $_.Name
@@ -113,8 +121,7 @@ function Compare-Pdf
                 $imageAfterPath = ""
                 $imageDiffPath = ""
             }
-            #Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} {1}/{2}: {3}({4})" -f (Get-Date), $Pdf, $png, $result, $identify)
-            Add-Message ("  {0}/{1}: {2}({3})" -f $Pdf, $png, $result, $identify) $outLogFilePath
+            Add-Message ("`t{0}/{1}: {2}({3})" -f $Pdf, $png, $result, $identify) $outLogFilePath
             $objectOfEachRecord = [pscustomobject]@{
                 "No."=$script:count
                 FileName=$Pdf
@@ -135,14 +142,22 @@ function Compare-Pdf
 
 
 # main
-if(-not $Office)
+if((-not $Office) -and (-not $Word) -and (-not $Excel))
 {
     $startTime = Get-Date
 }
 
-Get-ChildItem $beforeFiles -Name | Compare-Pdf
 
-if(-not $Office)
+# compare
+switch ($PSCmdlet.ParameterSetName) {
+    "Directory" { Get-ChildItem $beforeDir | Where-Object { $_.Name -like "*.pdf" } | Compare-Pdf; break }
+    "Files" { Get-ChildItem $beforeFiles -Name | Compare-Pdf; break }
+    default { return }
+}
+
+
+# report
+if((-not $Office) -and (-not $Word) -and (-not $Excel))
 {
     Import-Csv $outCsvFilePath | ConvertTo-Html | Where-Object {
         $_ -notmatch "<td>OK</td>"
@@ -160,6 +175,7 @@ if(-not $Office)
     Write-Host ("Start: {0}" -f $startTime)
     Write-Host ("End: {0}" -f $endTime)
     Write-Host ("Total: {0}" -f ($endTime - $startTime))
+    Write-Host ("TotalCount: {0}" -f $script:count)
 }
 
 
