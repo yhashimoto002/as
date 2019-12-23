@@ -31,14 +31,9 @@ $script:pdfArray = @()
 
 if(-not $Office)
 {
-    $script:outputDir = Join-Path $PSScriptRoot "output"
-    $outCsvFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
-    $outLogFilePath = Join-Path $PSScriptRoot ("result_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".log")
-    $outHtmlFilePath = Join-Path $PSScriptRoot ("result_NG_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".html")
     $outFilePathOfConvertOffice = Join-Path $PSScriptRoot ("result_convert_office_" + (Get-Date -Format "yyyy-MM-dd_HHmmss") + ".csv")
-    $script:count = 0
     # load function
-    . ".\Add-Message.ps1"
+    . ".\Compare-CommonFunc.ps1"
 }
 
 
@@ -155,32 +150,21 @@ if(-not $Office)
     $startTime = Get-Date
 }
 
-
 # compare
 Get-ChildItem $beforeDir | Where-Object { $_.Name -match $excelRegex } | Convert-ExcelToPdf
 $beforeFiles = $script:pdfArray
 if(-not $beforeFiles) { return }
-$script:pdfArray = @()
+
 Get-ChildItem $afterDir | Where-Object { $_.Name -match $excelRegex } | Convert-ExcelToPdf
-$afterFiles = $script:pdfArray
-. ".\Compare-Pdf.ps1" -beforeFiles $beforeFiles -afterFiles $afterFiles -Excel
 
+Get-ChildItem $beforeFiles -Name | Compare-Image -Excel
 
-# report
 if(-not $Office)
 {
-    Import-Csv $outCsvFilePath | ConvertTo-Html | Where-Object {
-        $_ -notmatch "<td>OK</td>"
-    } | ForEach-Object {
-        $_ -replace "<table>", "<table border=`"1`" style=`"border-collapse: collapse`">" `
-           -replace "</td>", "</td>`n" `
-           -replace "C:\\(\S+)`.png</td>", "<a href=`"C:\`$1`.png`"><img src=`"C:\`$1`.png`" width=`"300`"></a></td>" `
-    } | Out-File $outHtmlFilePath -Encoding utf8
+    # report
+    Get-HtmlReport
 
-    $csvObj = Import-Csv $outCsvFilePath
-    $csvObj | Select-Object * -ExcludeProperty Image* |
-        Export-Csv $outCsvFilePath -Encoding UTF8 -NoTypeInformation
-
+    # measurement
     $endTime = Get-Date
     Write-Host ("Start: {0}" -f $startTime)
     Write-Host ("End: {0}" -f $endTime)

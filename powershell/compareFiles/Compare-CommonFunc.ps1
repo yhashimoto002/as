@@ -52,7 +52,7 @@ function Compare-Image
     process
     {
         # skip if target Image doesn't exist in the opposite dir
-        if (! (Test-Path (Join-Path $afterDir $Image))) { return }
+        if (-not (Test-Path (Join-Path $afterDir $Image))) { return }
         
         $before_dir = Join-Path $outputDir $Image | Join-Path -ChildPath "before"
         $after_dir = Join-Path $outputDir $Image | Join-Path -ChildPath "after"

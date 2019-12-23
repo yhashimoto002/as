@@ -30,6 +30,8 @@ param(
     
 # main
 $startTime = Get-Date
+
+# compare
 Get-ChildItem $beforeDir | Where-Object { $_.Name -like "*.pdf" } | Compare-Image
 
 # report
