@@ -333,7 +333,13 @@ $ws_xml_publish.Save($ws_config_publish)
 Write-Host "Restarting Service ..."
 Get-Service -Name VotiroSAPI -ComputerName $IpAddr | Restart-Service
 Get-Service -Name VotiroSNMC -ComputerName $IpAddr | Restart-Service
-Get-Service -Name Votiro.FileConnector.WindowsService.exe -ComputerName $IpAddr | Restart-Service
+$fcService = try {
+    Get-Service -Name Votiro.FileConnector.WindowsService.exe -ComputerName $IpAddr -ErrorAction Stop
+}
+catch {
+    Get-Service -Name "Votiro SDS File Connector Service" -ComputerName $IpAddr
+}
+$fcService | Restart-Service
 Get-Service -ComputerName $IpAddr | Where-Object { $_.Name -eq 'VotiroSAPI' }
 Get-Service -ComputerName $IpAddr | Where-Object { $_.Name -eq 'VotiroSNMC' }
-Get-Service -ComputerName $IpAddr | Where-Object { $_.Name -eq 'Votiro.FileConnector.WindowsService.exe' }
+Get-Service -ComputerName $IpAddr | Where-Object { $_.Name -eq $fcService.Name }
