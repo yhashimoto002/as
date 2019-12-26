@@ -41,12 +41,12 @@ function Convert-ToImage
 
     if ($Path -match "`.(emf|wmf)$")
     {
-        magick convert -quiet -colorspace rgb -resize ${resize}x${resize}! -alpha remove -background white $Path (Join-Path $OutDir "image.png")
+        magick convert -quiet -colorspace rgb -resize ${resize}x${resize}! -alpha remove -background white $Path (Join-Path $OutDir "image.jpg")
     }
     else
     {
         #magick convert -quiet -colorspace rgb -density $imDensity -alpha remove -background white $Path (Join-Path $OutDir (Split-Path -Leaf $Path))
-        magick convert -quiet -colorspace rgb -density $imDensity -alpha remove -background white $Path (Join-Path $OutDir "image.png")
+        magick convert -quiet -colorspace rgb -density $imDensity -alpha remove -background white $Path (Join-Path $OutDir "image.jpg")
     }
     Add-Message ("converting {0} to finished." -f (Resolve-Path $Path)) $outLogFilePath
     Write-Host ""
