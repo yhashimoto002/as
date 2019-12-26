@@ -147,7 +147,7 @@ driver.quit()
 # convert csv to xlsx
 app = xw.App(visible=False)
 app.display_alerts = False
-bk = app.books.open(csv_path)
+bk = app.books.open(log_name)
 sht = bk.sheets.active
 sht.range('A:E').api.Font.Size = 9
 sht.range('A:E').columns.autofit()
