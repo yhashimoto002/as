@@ -27,7 +27,10 @@ param(
 
 # load function
 . ".\Compare-CommonFunc.ps1"
-    
+
+# install check
+if(-not (Test-InstalledIM)) { exit 1 }
+
 # main
 $startTime = Get-Date
 

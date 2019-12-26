@@ -13,6 +13,20 @@ $imDensity = $conf.imDensity
 $resize = $conf.resize
 $identifyThreshold = $conf.identifyThreshold
 
+# install check
+function Test-InstalledIM
+{
+    try
+    {
+        Get-Command magick -ErrorAction Stop
+        $true
+    }
+    catch
+    {
+        Write-Host "ImageMagick is not installed!`nThis script cannot be continued ..."
+        $false
+    }
+}
 
 function Convert-ToImage
 {

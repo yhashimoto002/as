@@ -34,6 +34,9 @@ $imageRegex = "^.*`.(jpg|jpeg|jp2|png|gif|tif|tiff|emf|wmf)$"
 # load function
 . ".\Compare-CommonFunc.ps1"
 
+# install check
+if(-not (Test-InstalledIM)) { exit 1 }
+
 # main
 $startTime = Get-Date
 Get-ChildItem $beforeDir | Where-Object { $_.Name -match $imageRegex } | Compare-Image

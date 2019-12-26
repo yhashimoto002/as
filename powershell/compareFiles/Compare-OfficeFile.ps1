@@ -36,6 +36,9 @@ $outFilePathOfConvertOffice = Join-Path $PSScriptRoot ("result_convert_office_" 
 # load function
 . ".\Compare-CommonFunc.ps1"
 
+# install check
+if(-not (Test-InstalledIM)) { exit 1 }
+
 function Convert-WordToPdf
 {
     param(
