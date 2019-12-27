@@ -1,4 +1,3 @@
-
 ## 説明
 
 - 2 つのフォルダにある同じ名前のファイルの見た目を比較し、結果を csv で出力します。csv には以下のカラムが出力されます。
@@ -91,8 +90,6 @@
     ```
     PS> $PSVersionTable.PSVersion.Major
     ```
-  - PowerShell のアップグレード方法は以下の URL が参考になります。
-
     > [Windows PowerShell のインストール - 既存の Windows PowerShell をアップグレードする](https://docs.microsoft.com/ja-jp/powershell/scripting/setup/installing-windows-powershell?view=powershell-6#upgrading-existing-windows-powershell)
 
 
@@ -132,7 +129,6 @@
     データ：1
     ```
 　　
-  　参考：
     > [WER Settings](https://docs.microsoft.com/en-us/windows/desktop/wer/wer-settings)
 
 - かなりメモリを食います。少なくとも 2GB 程度は空きがある状態で実行した方がよいでしょう。
