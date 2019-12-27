@@ -128,7 +128,6 @@
     種類：REG_DWORD
     データ：1
     ```
-　　
     > [WER Settings](https://docs.microsoft.com/en-us/windows/desktop/wer/wer-settings)
 
 - かなりメモリを食います。少なくとも 2GB 程度は空きがある状態で実行した方がよいでしょう。
