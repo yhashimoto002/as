@@ -28,9 +28,26 @@ if (! ($IpAddr -match "\d+\.\d+\.\d+\.\d+"))
 }
 
 
+# change if needed
+$username = "Administrator"
+$password = "Asgent123"
+
 # do not change
-$ws_install_dir = "\\$IpAddr\c$\Program Files\Votiro\SDS Web Service"
-$fc_install_dir = "\\$IpAddr\c$\Program Files\Votiro\Votiro File Connector"
+$encryptedPassword = ConvertTo-SecureString $password -AsPlainText -Force
+$mountDriveName = "V"
+$credential = New-Object System.Management.Automation.PSCredential($username, $encryptedPassword)
+try
+{
+    New-PSDrive -Name $mountDriveName -PSProvider FileSystem -Root "\\$IpAddr\c$" -Credential $credential -Persist -ErrorAction Stop | Out-Null
+}
+catch
+{
+    Remove-PSDrive $mountDriveName
+    New-PSDrive -Name $mountDriveName -PSProvider FileSystem -Root "\\$IpAddr\c$" -Credential (Get-Credential) -Persist | Out-Null
+}
+
+$ws_install_dir = "${mountDriveName}:\Program Files\Votiro\SDS Web Service"
+$fc_install_dir = "${mountDriveName}:\Program Files\Votiro\\Votiro File Connector"
 $ws_config_machine = "$ws_install_dir\config\machine.xml"
 $ws_config_webapi = "$ws_install_dir\config\webapi.xml"
 $ws_config_publish = "$ws_install_dir\Policy\publish.xml"
@@ -95,9 +112,9 @@ $sample_simple_policy.Add("BlockScriptFiles", $conf.SampleBlockScriptFiles)
 
 
 # mkdir
-New-Item ("\\$IpAddr\" + $default_channel_in.replace("c:", "c$")) -ItemType Directory -Force | Out-Null
-New-Item ("\\$IpAddr\" + $fe_channel_in.replace("c:", "c$")) -ItemType Directory -Force | Out-Null
-New-Item ("\\$IpAddr\" + $sample_channel_in.replace("c:", "c$")) -ItemType Directory -Force | Out-Null
+New-Item $default_channel_in.replace("c:", "${mountDriveName}:") -ItemType Directory -Force | Out-Null
+New-Item $fe_channel_in.replace("c:", "${mountDriveName}:") -ItemType Directory -Force | Out-Null
+New-Item $sample_channel_in.replace("c:", "${mountDriveName}:") -ItemType Directory -Force | Out-Null
 
 
 # backup
@@ -343,3 +360,5 @@ $fcService | Restart-Service
 Get-Service -ComputerName $IpAddr | Where-Object { $_.Name -eq 'VotiroSAPI' }
 Get-Service -ComputerName $IpAddr | Where-Object { $_.Name -eq 'VotiroSNMC' }
 Get-Service -ComputerName $IpAddr | Where-Object { $_.Name -eq $fcService.Name }
+
+Remove-PSDrive -Name $mountDriveName
