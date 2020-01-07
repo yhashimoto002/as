@@ -1,4 +1,3 @@
-
 ## 説明
 
 - 2 つのフォルダにある同じ名前のファイルの見た目を比較し、結果を csv で出力します。csv には以下のカラムが出力されます。
@@ -15,29 +14,29 @@
   ```
   output\
   │
-  ├ sample1.pdf
-  │ ├ before
+  ├ sample1.pdf\
+  │ ├ before\
   │ │ ├ image-0.png
   │ │ ├ image-1.png
   │ │ └ ...
-  │ ├ after
+  │ ├ after\
   │ │ ├ image-0.png
   │ │ ├ image-1.png
   │ │ └ ...
-  │ └ diff
+  │ └ diff\
   │    ├ image-0.png
   │    ├ image-1.png
   │    └ ...
-  ├ sample1.pdf
-  │ ├ before
+  ├ sample2.pdf\
+  │ ├ before\
   │ │ ├ image-0.png
   │ │ ├ image-1.png
   │ │ └ ...
-  │ ├ after
+  │ ├ after\
   │ │ ├ image-0.png
   │ │ ├ image-1.png
   │ │ └ ...
-  │ └ diff
+  │ └ diff\
   │    ├ image-0.png
   │    ├ image-1.png
   │    └ ...
@@ -69,7 +68,7 @@
    ```
    PS> .\Compare-OfficeFile.ps1 .\before .\after
    ```
-   [画像ファイルの場合]
+   画像ファイルの場合
    ```
    PS> .\Compare-Image.ps1 .\before .\after
    ```
@@ -84,15 +83,13 @@
 
 - Office ファイルをチェックするときは、Office がインストールされている環境で実施してください。Office がインストールされていないと失敗します。
 
-- PowerShell 4.0 未満ではテストしていません。うまく動作しなければ PowerShell 4.0 以上の環境で実行してみてください。
+- PowerShell 4.0 未満の環境ではテストしていません。うまく動作しなければ PowerShell 4.0 以上の環境で実行してみてください。
 
   - PowerShell を開いて以下のコマンドを実行して「2」が表示される場合、PowerShell 4.0 以上をインストールするか、Windows Server 2012 R2 などの環境で実行してください。
 
     ```
     PS> $PSVersionTable.PSVersion.Major
     ```
-  - PowerShell のアップグレード方法は以下の URL が参考になります。
-
     > [Windows PowerShell のインストール - 既存の Windows PowerShell をアップグレードする](https://docs.microsoft.com/ja-jp/powershell/scripting/setup/installing-windows-powershell?view=powershell-6#upgrading-existing-windows-powershell)
 
 
@@ -131,7 +128,6 @@
     種類：REG_DWORD
     データ：1
     ```
-
     > [WER Settings](https://docs.microsoft.com/en-us/windows/desktop/wer/wer-settings)
 
 - かなりメモリを食います。少なくとも 2GB 程度は空きがある状態で実行した方がよいでしょう。
