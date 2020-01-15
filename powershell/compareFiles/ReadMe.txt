@@ -106,7 +106,7 @@ PS> Set-ExecutionPolicy RemoteSigned
 PS> Get-ExecutionPolicy
 RemoteSigned
 
-・実行許可が毎回求められる場合は以下のコマンドを実行してください。
+・それでも実行できない場合は以下のコマンドを実行してください。
 
 PS> Unblock-File スクリプトファイル
 
