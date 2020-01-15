@@ -56,7 +56,8 @@ login_button = driver.find_element_by_xpath('//*[@id="login-form"]/input[9]')
 login_button.click()
 
 # scraping first page
-driver.get('https://votiro.zendesk.com/hc/en-us/requests/organization')
+#driver.get('https://votiro.zendesk.com/hc/en-us/requests/organization')
+driver.get('https://support.votiro.com/hc/en-us/requests/organization')
 page_source = driver.page_source
 soup = BeautifulSoup(page_source, 'lxml')
 
