@@ -8,6 +8,7 @@
 #            ISO 内の networkadapters.ini の中身を表示
 # 2018/08/27 StationName を指定しない場合はすべての StationName をチェックするように修正
 # 2019/01/23 c-smd.bin 内のパスもチェックするように修正
+# 2019/10/31 ISO のタイムゾーン、文字コードのチェック機能を追加
 ################################################################################
 
 
@@ -31,9 +32,9 @@ $fConfig = "config.bin"
 $fConfigSig2 = "config.bin.sig2"
 $fPsmd = "p-smd.bin"
 $fPsmdSig2 = "p-smd.bin.sig2"
-$fIso = "_System.iso"
+$fIso_latter = "_System.iso"
 $7zexe = $PSScriptRoot + "\7z.exe"
-
+$workDir = "C:\votiro_sds1"
 
 ################################################################################
 # 関数読み込み
@@ -51,7 +52,7 @@ $doDownloadPsmdFile = $true  # p-smd.bin (.sig2)
 $doDownloadOtherFile = Read-Host "Download All .BIN files? [y/n]"
     # av-smd.bin (.sig2), action.bin (.sig2), c-smd.bin (.sig2)
 $doDownloadIso = Read-Host "Download ISO file? [y/n]"
-    # config.bin, networkadaptor.ini ISOxx.txt from ISO
+    # config.bin, ISO
 
 
 ################################################################################
@@ -90,7 +91,7 @@ if ($doDownloadOtherFile -match "y|Y|[yY][eE][sS]")
 }
 if ($doDownloadIso -match "y|Y|[yY][eE][sS]")
 {
-    $arrayOfDownloadFiles.Add($fIso)              # xxx_System.iso
+    $arrayOfDownloadFiles.Add($fIso_latter)              # xxx_System.iso
 }
 
 
@@ -98,13 +99,16 @@ if ($doDownloadIso -match "y|Y|[yY][eE][sS]")
 # 事前準備
 ################################################################################
 # 現在時刻 (yyyyMMddHHmmss) を作業ディレクトリにする
-$workDir = Join-Path $PSScriptRoot (Get-Date -Format "yyyyMMddHHmmss")
-New-Item $workDir -ItemType Directory | Out-Null
+$tempWorkDir = Join-Path $workDir (Get-Date -Format "yyyyMMddHHmmss")
+New-Item $tempWorkDir -ItemType Directory | Out-Null
+
 
 # 出力用メッセージ
 $output = @"
+
+
 ################################### result #####################################
-"@ | Out-File $workDir\result
+"@ | Out-File $tempWorkDir\result
 
 # メッセージ出力用関数
 # @param　出力メッセージ
@@ -112,8 +116,8 @@ function addMessage()
 {
     param([string]$message)
 
-    #Invoke-Expression "`"$message`" | Out-File $workDir\result -Append"
-    $message | Out-File $workDir\result -Append
+    #Invoke-Expression "`"$message`" | Out-File $tempWorkDir\result -Append"
+    $message | Out-File $tempWorkDir\result -Append
 }
 
 
@@ -137,17 +141,18 @@ else
 # Update サーバから各ファイルをダウンロードする
 foreach ($s in $stationName)
 {
-    $outDir = Join-Path $workDir $s
-    New-Item $outDir -ItemType Directory | Out-Null
+    $tempWorkDirForStation = Join-Path $tempWorkDir $s
+    New-Item $tempWorkDirForStation -ItemType Directory | Out-Null
     addMessage "[$s/file list]"
     addMessage ("{0,-20}{1}" -f "FileName", "LastModifiedDate")
     addMessage "---------------------------------------"
     foreach ($f in $arrayOfDownloadFiles)
     {
-        if ($f -eq $fIso) { $f = $s + $fIso }
-        $outFile = Join-Path $outDir $f
+        if ($f -eq $fIso_latter) { $f = $s + $fIso_latter }
+        $outFile = Join-Path $tempWorkDirForStation $f
         $response = Invoke-WebrequestToUpdateServer -UserName $UserName -StationName $s -Method "HEAD" -File $f
         $lastModifiedDate = [datetime]$response.Headers["Last-Modified"]
+        Write-Host ("Downloading {0} ..." -f $f)
         Invoke-WebrequestToUpdateServer -UserName $UserName -StationName $s -File $f -OutFile $outFile
 
         #addMessage $f`t`t$lastModifiedDate
@@ -162,14 +167,16 @@ foreach ($s in $stationName)
 ################################################################################
 
 $CheckLicense = {
+    Write-Host "### Check 1 : ExpirationData from license.bin ###"
+    Write-Host "Check 1 started."
     foreach ($s in $stationName)
     {
         # license.bin から license.xml を取り出す
-        $outDir = Join-Path $workDir $s
-        Expand-Archive-7zip -File (Join-Path $outDir $fLicense) -OutDir $outDir
+        $tempWorkDirForStation = Join-Path $tempWorkDir $s
+        Expand-Archive-7zip -File (Join-Path $tempWorkDirForStation $fLicense) -OutDir $tempWorkDirForStation
     
         # license.xml から CustomerName と ExpirationDate の値を取り出す
-        $xml = [xml](Get-Content $outDir"\license.xml")
+        $xml = [xml](Get-Content $tempWorkDirForStation"\license.xml")
         $customerName = $xml.MobileTickXML.CustomerName
         $expirationDate = $xml.MobileTickXML.License.ExpirationDate
 
@@ -185,22 +192,24 @@ $CheckLicense = {
         addMessage "ExpirationDate: $expirationDate"
         addMessage ""
     }
+    Write-Host "Check 1 finished."
 }
 
 
 ################################################################################
-# Check 2 : RemotePath from config.bin
-# Check 3: RemotePath from c-smd.bin
+# Check 2 : RemotePath from config.bin & c-smd.bin
 ################################################################################
 $CheckConfig = {
+    Write-Host "### Check 2 : RemotePath from config.bin & c-smd.bin ###"
+    Write-Host "Check 2 started."
     foreach ($s in $stationName)
     {
         # config.bin から config.xml を取り出す
-        $outDir = Join-Path $workDir $s
-        Expand-Archive-7zip -FilePath (Join-Path $outDir $fConfig) -OutDir $outDir
+        $tempWorkDirForStation = Join-Path $tempWorkDir $s
+        Expand-Archive-7zip -FilePath (Join-Path $tempWorkDirForStation $fConfig) -OutDir $tempWorkDirForStation
 
         # config.xml から RemotePath の値を取り出す
-        $xml = [xml](Get-Content $outDir\config.xml)
+        $xml = [xml](Get-Content $tempWorkDirForStation\config.xml)
         $remotePathOfPsmd = $xml.MobileTickDLP.ProgFiles.RemotePath[0]
         $remotePathOfCsmd = $xml.MobileTickDLP.ProgFiles.RemotePath[1]
 
@@ -212,16 +221,16 @@ $CheckConfig = {
         addMessage ""
 
         # c-smd.bin から config.xml を取り出す
-        $outDir = Join-Path $workDir $s
-        Expand-Archive-7zip -FilePath (Join-Path $outDir $fCsmd) -OutDir $outDir
+        $tempWorkDirForStation = Join-Path $tempWorkDir $s
+        Expand-Archive-7zip -FilePath (Join-Path $tempWorkDirForStation $fCsmd) -OutDir $tempWorkDirForStation
 
         # config.xml から RemotePath の値を取り出す
-        $xml = [xml](Get-Content $outDir\config.xml)
+        $xml = [xml](Get-Content $tempWorkDirForStation\config.xml)
         $remotePathOfPsmd = $xml.MobileTickDLP.ProgFiles.RemotePath[0]
         $remotePathOfCsmd = $xml.MobileTickDLP.ProgFiles.RemotePath[1]
 
         # customer.xml から progLicense, progExternal, progInternal の値を取り出す
-        $xml = [xml](Get-Content $outDir\customer.xml)
+        $xml = [xml](Get-Content $tempWorkDirForStation\customer.xml)
         $remotePathOfLicense = $xml.MobileTickDLP.progLicense
         $remotePathOfAvSmd = $xml.MobileTickDLP.progExternal
         $remotePathOfInternalFtpRoot = $xml.MobileTickDLP.progInternal
@@ -240,6 +249,7 @@ $CheckConfig = {
         addMessage ""
 
     }
+    Write-Host "Check 2 finished."
 }
 
 
@@ -247,11 +257,13 @@ $CheckConfig = {
 # Check 3 : SDS version from p-smd.bin
 ################################################################################
 $CheckPsmd = {
+    Write-Host "### Check 3 : SDS version from p-smd.bin ###"
+    Write-Host "Check 3 started."
     foreach ($s in $stationName)
     {
         # p-smd.bin の SHA256 ハッシュ値を算出する
-        $outDir = Join-Path $workDir $s
-        $sha256OfPsmd = (Get-FileHash -Algorithm SHA256 $outDir\$fPsmd).Hash
+        $tempWorkDirForStation = Join-Path $tempWorkDir $s
+        $sha256OfPsmd = (Get-FileHash -Algorithm SHA256 $tempWorkDirForStation\$fPsmd).Hash
 
         # p-smd.bin の歴代 Ver と比較する
         switch($sha256OfPsmd)
@@ -278,56 +290,109 @@ $CheckPsmd = {
         addMessage "SDS Ver: $SdsVer"
         addMessage ""
     }
+    Write-Host "Check 3 finished."
 }
 
 
 ################################################################################
-# Check 4 : SDS version from p-smd.bin
-################################################################################
-
-
-
-
-################################################################################
-# Check 5 : config.bin & networkadapters.ini from ISO
+# Check 4 : config.bin & networkadapters.ini & timezone & codepage from ISO
 ################################################################################
 $CheckIso = {
+    Write-Host "### config.bin & networkadapters.ini & timezone & codepage from ISO ###"
+    Write-Host "Check 4 started."
     foreach ($s in $stationName)
     {
         # ISO の SHA256 ハッシュ値を算出する
-        $outDir = Join-Path $workDir $s
-        $fIso = $s + $fIso
-        $sha256OfIso = (Get-FileHash -Algorithm SHA256 $outDir\$fIso).Hash
+        $tempWorkDirForStation = Join-Path $tempWorkDir $s
+        $fIso = $s + $fIso_latter
+        $isoPath = Join-Path $tempWorkDirForStation $fIso
 
-        # Update サーバの config.bin と分けるため、$outDir に iso ディレクトリを別途作成
-        $workDirForIso = Join-Path $outDir "\iso"
-        New-Item $workDirForIso -ItemType Directory | Out-Null
+        $sha256OfIso = (Get-FileHash -Algorithm SHA256 $isoPath).Hash
+
+        # Update サーバの config.bin と分けるため、$tempWorkDirForStation に iso ディレクトリを別途作成
+        $tempWorkDirForIso = Join-Path $tempWorkDirForStation "\iso"
+        New-Item $tempWorkDirForIso -ItemType Directory | Out-Null
         # ISO から config.bin を取り出す
-        Expand-Archive-7zip -FilePath (Join-Path $outDir $fIso) -OutDir $workDirForIso
+        Write-Host ("Extracting {0} ..." -f $fIso) 
+        Expand-Archive-7zip -FilePath $isoPath -OutDir $tempWorkDirForIso
 
         # config.bin から config.xml を取り出す
-        Expand-Archive-7zip -FilePath (Join-Path $workDirForIso $fConfig) -OutDir $workDirForIso
+        Expand-Archive-7zip -FilePath (Join-Path $tempWorkDirForIso $fConfig) -OutDir $tempWorkDirForIso
 
         # config.xml から RemotePath を取り出す
-        $xml = [xml](Get-Content $workDirForIso\config.xml)
+        $xml = [xml](Get-Content $tempWorkDirForIso\config.xml)
         $remotePathOfPsmd = $xml.MobileTickDLP.ProgFiles.RemotePath[0]
         $remotePathOfCsmd = $xml.MobileTickDLP.ProgFiles.RemotePath[1]
 
         # ISOVERxx.x.TXT から ISO Version と ISO Date を取り出す
         $isoVer = "ISO Version: 不明"
-        if(Test-Path $workDirForIso\ISOVER*.TXT)
+        if(Test-Path $tempWorkDirForIso\ISOVER*.TXT)
         {
-            $isoVer = Get-Content $workDirForIso\ISOVER*.TXT | Select-String "^ISO Version"
+            $isoVer = Get-Content $tempWorkDirForIso\ISOVER*.TXT | Select-String "^ISO Version"
         }
 
         $isoDate = "ISO Date: 不明"
-        if(Test-Path $outDir\iso\ISOVER*.TXT)
+        if(Test-Path $tempWorkDirForStation\iso\ISOVER*.TXT)
         {
-            $isoDate = Get-Content $workDirForIso\ISOVER*.TXT | Select-String "^ISO Date"
+            $isoDate = Get-Content $tempWorkDirForIso\ISOVER*.TXT | Select-String "^ISO Date"
         }
 
         # networkadapters.ini からネットワーク情報を取り出す
-        $networkInfo = Get-Content $workDirForIso\networkadapters.ini
+        $networkInfo = Get-Content $tempWorkDirForIso\networkadapters.ini
+
+        # mount 場所の作成
+        $tempWorkDirForMount = Join-Path $tempWorkDirForStation "\mount"
+        New-Item $tempWorkDirForMount -ItemType Directory -Force | Out-Null
+
+        # ISO のマウント
+        Write-Host ("Mounting {0} ..." -f $isoPath)
+        $mountResult = Mount-DiskImage -ImagePath $isoPath -PassThru
+        $wimPath = ($mountResult | Get-Volume).DriveLetter + ":\SOURCES\BOOT.WIM"
+
+        # Windows イメージのマウント
+        Write-Host "Mounting Windows image ..."
+        $ProgressPreference = "SilentlyContinue"
+        Mount-WindowsImage -ImagePath $wimPath -Index 1 -Path $tempWorkDirForMount -ReadOnly | Out-Null
+
+        # タイムゾーン情報の取得
+        $timeZone = dism /image:$tempWorkDirForMount /get-intl |
+            Select-String -Pattern "^Default time zone"
+
+        # 文字コード情報を取得
+        $regRoot = "HKLM\VOTIROISO"
+        $regFile = Join-Path $tempWorkDirForMount "Windows\system32\config\SYSTEM"
+        $regCodePage = Join-Path $RegRoot "ControlSet001\Control\Nls\CodePage"
+        Write-Host ("Loading registry {0} ..." -f $regRoot)
+        reg load $RegRoot $RegFile | Out-Null
+        $getReg = Get-Item -Path "Registry::${RegCodePage}"
+        $codeACP = ""
+        switch ($getReg.GetValue("ACP"))
+        {
+            "862" { $codeDesc = "OEM Hebrew; Hebrew (DOS)" ; break}
+            "932" { $codeDesc = "ANSI/OEM Japanese; Japanese (Shift-JIS)" ; break}
+            "1255" { $codeDesc = "ANSI Hebrew; Hebrew (Windows)" ; break}
+            default { $codeDesc = "Unknown" }
+        }
+        $codeACP = "{0}({1})" -f $getReg.GetValue("ACP"), $codeDesc
+        $codeOEMCP = ""
+        switch ($getReg.GetValue("OEMCP"))
+        {
+            "862" { $codeDesc = "OEM Hebrew; Hebrew (DOS)" ; break}
+            "932" { $codeDesc = "ANSI/OEM Japanese; Japanese (Shift-JIS)" ; break}
+            "1255" { $codeDesc = "ANSI Hebrew; Hebrew (Windows)" ; break}
+            default { $codeDesc = "Unknown" }
+        }
+        $codeOEMCP = "{0}({1})" -f $getReg.GetValue("OEMCP"), $codeDesc
+        $getReg.close()
+        [gc]::Collect()
+        Write-Host ("Unloading registry {0} ..." -f $regRoot)
+        reg unload $RegRoot | Out-Null
+
+        # Windows イメージと ISO のアンマウント
+        Write-Host "Unmounting Windows image ..."
+        Dismount-WindowsImage -Path $tempWorkDirForMount -Discard | Out-Null
+        Write-Host ("Unmounting {0} ..." -f $isoPath)
+        DisMount-DiskImage $IsoPath | Out-Null
 
         # 出力用メッセージ
         addMessage "[[$s/ISO]]"
@@ -347,7 +412,16 @@ $CheckIso = {
         {
             addMessage $l
         }
+        addMessage ""
+        addMessage "[TimeZone]"
+        addMessage $timeZone
+        addMessage ""
+        addMessage "[CodePage]"
+        addMessage "ACP: ${codeACP}"
+        addMessage "OEMCP: ${codeOEMCP}"
+        addMessage ""
     }
+    Write-Host "Check 4 finished."
 }
 
 
@@ -363,10 +437,12 @@ if ($doDownloadIso -match "y|Y|[yY][eE][sS]") { & $CheckIso }
 ################################################################################
 # 出力
 ################################################################################
-Get-Content $workDir\result
+Get-Content $tempWorkDir\result
 
 
 ################################################################################
 # 後始末
 ################################################################################
-#Remove-Item $workDir\*\* -Recurse -Exclude $arrayOfDownloadFiles
+$arrayOfDownloadFiles.Add("*$fIso_latter")
+Remove-Item $tempWorkDir\*\* -Recurse -Exclude $arrayOfDownloadFiles
+
