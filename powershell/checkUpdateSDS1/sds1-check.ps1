@@ -150,17 +150,19 @@ foreach ($s in $stationName)
     {
         if ($f -eq $fIso_latter) { $f = $s + $fIso_latter }
         $outFile = Join-Path $tempWorkDirForStation $f
-        $response = Invoke-WebrequestToUpdateServer -UserName $UserName -StationName $s -Method "HEAD" -File $f
-        $lastModifiedDate = [datetime]$response.Headers["Last-Modified"]
         Write-Host ("Downloading {0} ..." -f $f)
-        Invoke-WebrequestToUpdateServer -UserName $UserName -StationName $s -File $f -OutFile $outFile
-
-        #addMessage $f`t`t$lastModifiedDate
+        $response = Invoke-WebrequestToUpdateServer -UserName $UserName -StationName $s -File $f -OutFile $outFile
+        if ($LASTEXITCODE -ne 0)
+        {
+            Write-Host ("{0} is failed to be downloaded. Try later..." -f $f)
+            exit 1
+        }
+        $lastModifiedDate = [datetime](($response -match "Last-Modified") -replace "^[^:]+:", "").trim()
+        Write-Host ""
         addMessage ("{0,-20}{1}" -f $f, $lastModifiedDate)
     }
     addMessage ""
 }
-
 
 ################################################################################
 # Check 1 : ExpirationData from license.bin
