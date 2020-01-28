@@ -8,11 +8,11 @@
 スクリプトと同じフォルダに result_AV_yyyyMMdd.csv という名前でチェック結果が
 出力されていきます。
 
-"User"	"File"	"TimeStamp"	"CheckDate"	"Result"
-"adachicity"	"av-smd.bin"	"2018/07/05 6:13:36"	"2018/07/05 19:00:11"	"OK"
-"adachicity"	"av-smd.bin.sig2"	"2018/07/05 6:13:43"	"2018/07/05 19:00:12"	"OK"
-"AioiCity"	"av-smd.bin"	"2018/07/05 6:13:36"	"2018/07/05 19:00:12"	"OK"
-"AioiCity"	"av-smd.bin.sig2"	"2018/07/05 6:13:43"	"2018/07/05 19:00:13"	"OK"
+"User"	"File"	"TimeStamp"	"CheckDate"	"Result"	"Error"
+"adachicit"	"av-smd.bin"			"NG"	"curl: (22) The requested URL returned error: 404 Not Found"
+"adachicit"	"av-smd.bin.sig2"			"NG"	"curl: (22) The requested URL returned error: 404 Not Found"
+"AioiCity"	"av-smd.bin"	"2020/01/28 7:18:54"	"2020/01/28 16:38:46"	"OK"	""
+"AioiCity"	"av-smd.bin.sig2"	"2020/01/28 7:19:21"	"2020/01/28 16:38:47"	"OK"	""
 (...)
 
 指定日数より過去のタイムスタンプが検出されたら maillist_NG.txt に記載された
@@ -20,21 +20,6 @@
 
 さらに、結果が OK の場合でも毎週月曜日の 8:00 に通知します。
 定期通知する曜日と時間は複数指定可能です
-
--- check-all-once.ps1
-
-ユーザのすべての bin ファイルのタイムスタンプを取得するだけです。
-本スクリプトでは特に通知はしません。
-
-スクリプトと同じフォルダに result_ALL_yyyyMMdd.csv という名前でチェック結果が
-出力されていきます。
-
-"User"	"Station"	"File"	"TimeStamp"	"CheckDate"
-"adachicity"	"SDSR"	"license.bin"	"2016/12/22 16:45:38"	"2018/07/06 11:20:55"
-"adachicity"	"SDSR"	"license.bin.sig2"	"2016/12/22 16:45:39"	"2018/07/06 11:20:56"
-"adachicity"	"SDSR"	"config.bin"	"2017/03/02 10:20:36"	"2018/07/06 11:20:56"
-"adachicity"	"SDSR"	"config.bin.sig2"	"2017/03/02 10:20:36"	"2018/07/06 11:20:57"
-(...)
 
 
 ■使い方
@@ -71,20 +56,6 @@
 	この場合は、C:\work\check-av-smd フォルダを作成して、そこにスクリプト等を
 	配置してください。
 
--- check-all-once.ps1
-
-1. 任意のフォルダに以下のようにファイルとフォルダを配置します
-
-	\- check-all-once.ps1 ファイル
-	\- user.txt ファイル
-	\- general フォルダ
-		\- Invoke-WebrequestToUpdateServer.ps1
-		\- Send-MailMessage-Net.ps1
-
-2. PowerShell を立ち上げてスクリプトを実行します。
-
-	PS> .\check-all-once.ps1
-
 
 ■ 注意
 
@@ -120,5 +91,5 @@ RemoteSigned
 ■履歴
 2018/6/8 橋本 新規作成
 2018/7/6 橋本 リニューアル
-
+2020/1/21 橋本 check-all-once.ps1 は sds1-check.ps1 で代用できることに気付いたので削除
 
