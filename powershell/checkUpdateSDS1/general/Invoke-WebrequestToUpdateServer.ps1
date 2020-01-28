@@ -14,17 +14,6 @@
     $updateServerUrl = "https://updates.votiro.com/"
     $fAvSmd = "av-smd.bin"
     $fAvSmdSig2 = "av-smd.bin.sig2"
-    $fActions = "actions.bin"
-    $fActionsSig2 = "actions.bin.sig2"
-    $fCsmd = "c-smd.bin"
-    $fCsmdSig2 = "c-smd.bin.sig2"
-    $fLicense = "license.bin"
-    $fLicenseSig2 = "license.bin.sig2"
-    $fConfig = "config.bin"
-    $fConfigSig2 = "config.bin.sig2"
-    $fPsmd = "p-smd.bin"
-    $fPsmdSig2 = "p-smd.bin.sig2"
-    $fIso = $StationName + "_System.iso"
 
     # URL
     # av-smd.bin (.sig2): /username/xxx.bin(.sig2)
@@ -46,21 +35,12 @@
  
 
     # Web リクエスト
-    try
+    if ( $Method -eq "HEAD" )
     {
-        $ProgressPreference = "SilentlyContinue"
-        if ( $Method -eq "HEAD" )
-        {
-            Invoke-WebRequest -Uri $url -Method $method -Credential $cred
-        }
-        else
-        {
-            Invoke-WebRequest -Uri $url -Method $method -Credential $cred -OutFile $outFile
-        }
+        & .\general\curl.exe -I -f --connect-timeout 5 --user ${userNameForCred}:$passwordForCred $url
     }
-    catch [System.Net.WebException]
+    else
     {
-        $_.Exception
-        $exceptionDetails = $_.Exception
+        & .\general\curl.exe -f -D - --connect-timeout 5 --user ${userNameForCred}:$passwordForCred -o $outFile $url
     }
 }
