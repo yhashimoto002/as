@@ -12,7 +12,7 @@ $arrayResult = @()
 ################################################################################
 # 関数読み込み
 ################################################################################
-Join-Path $PSScriptRoot "general\*.ps1" | dir | foreach { . $_ }
+Join-Path $PSScriptRoot "general\*.ps1" | Get-ChildItem | ForEach-Object { . $_ }
 
 
 ################################################################################
@@ -40,21 +40,26 @@ $arrayOfDownloadFiles.Add($fAvSmd)            # av-smd.bin
 $arrayOfDownloadFiles.Add($fAvSmdSig2)        # av-smd.bin.sig2
 
 # 各ユーザごとのファイルのタイムスタンプを取得し、結果を配列に格納
-Get-Content $userlist | foreach {
+Get-Content $userlist | ForEach-Object {
     $UserName = $_.Trim()
     foreach ($f in $arrayOfDownloadFiles)
     {
         $response = Invoke-WebrequestToUpdateServer -UserName $UserName -Method "HEAD" -File $f
-        $lastModifiedDate = [datetime]$response.Headers["Last-Modified"]
-        $nowDate = (Get-Date)
         # 現在の日付との差が $checkDate 以内なら OK
-        if (($nowDate - $lastModifiedDate).totalDays -ge $checkDate)
+        $result = "NG"
+        $errorMessage = ""
+        if ($LASTEXITCODE -eq 0)
         {
-            $result = "NG"
+            $lastModifiedDate = [datetime](($response -match "Last-Modified") -replace "^[^:]+:", "").trim()
+            $nowDate = Get-Date
+            if (($nowDate - $lastModifiedDate).totalDays -le $checkDate)
+            {
+                $result = "OK"
+            }
         }
         else
         {
-            $result = "OK"
+            $errorMessage = $response[0]   
         }
 
         # 結果を配列に格納
@@ -64,6 +69,7 @@ Get-Content $userlist | foreach {
             TimeStamp=$lastModifiedDate
             CheckDate=$nowDate
             Result=$result
+            Error=$errorMessage
         }
         $script:arrayResult += $objectOfEachRecord
 
@@ -75,9 +81,8 @@ Get-Content $userlist | foreach {
 # csv に出力
 $arrayResult | Export-Csv $outFilePath -Delimiter `t -NoTypeInformation -Append
 
-# Result が OK 以外ならメールを送る
-# 仮に Update サーバが落ちていれば Result は Null になるので、その場合もメールが飛ぶ
-if ($arrayResult | ? { $_.Result -ne "OK"})
+# Result が NG ならメールを送る
+if ($arrayResult | Where-Object { $_.Result -eq "NG"})
 {
     Send-MailMessage-Net -To $mailToInNG -Subject $mailSubjectInNG -Body $mailBodyInNG
 }
