@@ -45,21 +45,25 @@ Get-Content $userlist | ForEach-Object {
     foreach ($f in $arrayOfDownloadFiles)
     {
         $response = Invoke-WebrequestToUpdateServer -UserName $UserName -Method "HEAD" -File $f
-        # 現在の日付との差が $checkDate 以内なら OK
         $result = "NG"
         $errorMessage = ""
         if ($LASTEXITCODE -eq 0)
         {
+            # 現在の日付との差が $checkDate 以内なら OK
             $lastModifiedDate = [datetime](($response -match "Last-Modified") -replace "^[^:]+:", "").trim()
             $nowDate = Get-Date
             if (($nowDate - $lastModifiedDate).totalDays -le $checkDate)
             {
                 $result = "OK"
             }
+            else
+            {
+                $errorMessage = "The timestamp of the AV signature is older than {0} days ago." -f $checkDate
+            }
         }
         else
         {
-            $errorMessage = $response[0]   
+            $errorMessage = $response[0]
         }
 
         # 結果を配列に格納
@@ -69,7 +73,7 @@ Get-Content $userlist | ForEach-Object {
             TimeStamp=$lastModifiedDate
             CheckDate=$nowDate
             Result=$result
-            Error=$errorMessage
+            ErrorMessage=$errorMessage
         }
         $script:arrayResult += $objectOfEachRecord
 
