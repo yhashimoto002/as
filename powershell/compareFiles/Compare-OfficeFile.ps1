@@ -165,20 +165,22 @@ function Convert-ExcelToPdf
         {
             $excelApplication = New-Object -ComObject Excel.Application
             $excelApplication.Visible = $false
+            $excelApplication.DisplayAlerts = $false
     
             # DEBUG
             # Write-Host ("{0:yyyy/MM/dd HH:mm:ss.fff} opening {1} ..." -f (Get-Date), $excelFilePath)
             # https://docs.microsoft.com/ja-jp/office/vba/api/excel.workbooks.open
-            $workbooks = $excelApplication.Workbooks.Open($excelFilePath,    #FileName
-                                                            $false,          #UpdateLinks
-                                                            $true,           #ReadOnly
-                                                            [Type]::Missing, #Format
-                                                            "xxxxx")         #Password
+            $workbooks = $excelApplication.Workbooks
+            $workbook = $workbooks.Open($excelFilePath,    #FileName
+                                        $false,            #UpdateLinks
+                                        $true,             #ReadOnly
+                                        [Type]::Missing,   #Format
+                                        "xxxxx")           #Password
     
             Add-Message ("converting {0} to PDF ..." -f $excelFilePath) $outLogFilePath
             # https://docs.microsoft.com/ja-jp/dotnet/api/microsoft.office.tools.excel.worksheet.exportasfixedformat?view=vsto-2017
-            $workbooks.ExportAsFixedFormat([Microsoft.Office.Interop.Excel.xlFixedFormatType]::xlTypePDF, $pdfFilePath)
-            $workbooks.Saved = $true
+            $workbook.ExportAsFixedFormat([Microsoft.Office.Interop.Excel.xlFixedFormatType]::xlTypePDF, $pdfFilePath)                                                                      #OpenAfterPublish
+            $workbook.Saved = $true
             $script:pdfArray += $pdfFilePath
             Add-Message ("converting {0} is finished." -f $excelFilePath) $outLogFilePath
             $result = "OK"
@@ -208,9 +210,19 @@ function Convert-ExcelToPdf
         finally
         {
             # closing
+            if (Test-Path Variable:workbook)
+            {
+                $workbook.Close($false)
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($workbook) | Out-Null
+                $workbook = $null
+                Remove-Variable workbook -ErrorAction SilentlyContinue
+                [GC]::Collect | Out-Null
+                [GC]::WaitForPendingFinalizers() | Out-Null
+                [GC]::Collect | Out-Null
+            }
+    
             if (Test-Path Variable:workbooks)
             {
-                $workbooks.Close($false)
                 [System.Runtime.Interopservices.Marshal]::ReleaseComObject($workbooks) | Out-Null
                 $workbooks = $null
                 Remove-Variable workbooks -ErrorAction SilentlyContinue
