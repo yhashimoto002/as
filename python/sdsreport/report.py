@@ -2,13 +2,29 @@ import os
 import sys
 import glob
 import re
+import csv
 from datetime import datetime, date, time
 
+# args
 args = sys.argv
+if len(args) == 1 or len(args) > 3:
+    print("Invalid arguments!")
+    print(r"Usage: .\collect_image_size_of_pdf.py *log*")
+    print(r"Usage: .\collect_image_size_of_pdf.py *log* report.csv")
+    exit(1)
+
+if len(args) == 3:
+    log_name = args[2]
+else:
+    log_name = 'report.csv'
+
 log_list = glob.glob(args[1])
 
+# variables
 report_dic = {}
+sanitization_done_dic = {}
 ftd_dic = {}
+
 
 # regular expression pattern
 # ThreadID, Time, ItemID, FileName, FileSize
@@ -58,6 +74,10 @@ log_pattern_dic = {
                {"ThreadID":m.group('ThreadID'),
                 "SanitizationStartedTime":datetime.strptime(m.group('Time'), "%d/%m/%Y %H:%M:%S.%f"),
                 "FileName":m.group('FileName')}),
+    regex_pattern_sanitization_done:
+    lambda m: ("SanitizationDoneLog", m.group('ThreadID'),
+               {"SanitizationDoneTime":datetime.strptime(m.group('Time'), "%d/%m/%Y %H:%M:%S.%f"),
+                "PublishFileName":m.group('FileName')}),
     regex_pattern_publish_done:
     lambda m: ("SanitizationLog", m.group('ItemID'),
                {"PublishDoneTime":datetime.strptime(m.group('Time'), "%d/%m/%Y %H:%M:%S.%f"),
@@ -92,10 +112,16 @@ def make_record(regex):
                 report_dic[record_id] = {"ThreadID":"", "FileName":"", "FileSize":"", "FileType":"",
                                          "RequestReceivedTime":"", "SanitizationStartedTime":"",
                                          "SanitizationDoneTime":"", "PublishDoneTime":"",
-                                         "ResponseDoneTime":"", "TotalSanitizingTime":"",
+                                         "ResponseDoneTime":"", "TotalProcessSeconds":"",
+                                         "UploadAndQueueWaitSeconds":"", "SanitizationProcessSeconds":"",
+                                         "PublishProcessSeconds":"", "DownloadWaitSeconds":"",
                                          "PublishFileName":"", "Status":"", "IncludedFiles":[],
                                          "BlockReason":""}
             report_dic[record_id].update(value_dic)
+        elif flag == "SanitizationDoneLog":
+            if record_id not in sanitization_done_dic:
+                sanitization_done_dic[record_id] = []
+            sanitization_done_dic[record_id].append(value_dic)
         elif flag == "FtdLog":
             if record_id not in ftd_dic:
                 ftd_dic[record_id] = []
@@ -103,65 +129,85 @@ def make_record(regex):
 
 
 # read log and make record
-for log in log_list:
-    print("Starting to process {} ...".format(log), file=sys.stderr)
-    try:
+start_time = datetime.now()
+try:
+    for log in log_list:
+        print("Starting to process {} ...".format(log), file=sys.stderr)
         with open(log, "r", encoding="utf_8_sig") as f:
             for line in f:
                 for regex in log_pattern_dic:
                     make_record(regex)
-    except:
-        pass
+except FileNotFoundError:
+    pass
 
 
+with open(log_name, 'w', encoding='utf_8_sig') as f:
+    f.write("ItemID, FileName, FileSize, FileType, RequestReceivedTime, SanitizationStartedTime, SanitizationDoneTime, PublishDoneTime, ResponseDoneTime, TotalProcessSeconds, UploadAndQueueWaitSeconds, PublishProcessSeconds, DownloadWaitSeconds, PublishFileName, IncludedFileCount, Status, BlockReason\n")
+
+
+print("Creating csv file ...")
 for item_id in report_dic:
-    process_start_time, Process_end_time = None, None
     thread_id = report_dic[item_id]["ThreadID"]
 
-    # get process start/end time
-    process_start_time = report_dic[item_id]["SanitizationStartedTime"]
-    process_end_time = report_dic[item_id]["SanitizationDoneTime"] \
-                           if report_dic[item_id]["SanitizationDoneTime"] \
-                           else report_dic[item_id]["PublishDoneTime"]
+    # Calculationg TotalProcessSeconds.
+    if report_dic[item_id]["RequestReceivedTime"] and report_dic[item_id]["ResponseDoneTime"]:
+        report_dic[item_id]["TotalProcessSeconds"] = (report_dic[item_id]["ResponseDoneTime"] - report_dic[item_id]["RequestReceivedTime"]).total_seconds()
+    
+    # Calculationg UploadAndQueueWaitSeconds.
+    if report_dic[item_id]["RequestReceivedTime"] and report_dic[item_id]["SanitizationStartedTime"]:
+        report_dic[item_id]["UploadAndQueueWaitSeconds"] = (report_dic[item_id]["SanitizationStartedTime"] - report_dic[item_id]["RequestReceivedTime"]).total_seconds()
+    
+    # Calculating PublishProcessSeconds.
+    if report_dic[item_id]["SanitizationStartedTime"] and report_dic[item_id]["PublishDoneTime"]:
+        report_dic[item_id]["PublishProcessSeconds"] = (report_dic[item_id]["PublishDoneTime"] - report_dic[item_id]["SanitizationStartedTime"]).total_seconds()
+    
+    # Calculating DownloadWaitSeconds.
+    if report_dic[item_id]["PublishDoneTime"] and report_dic[item_id]["ResponseDoneTime"]:
+        report_dic[item_id]["DownloadWaitSeconds"] = (report_dic[item_id]["ResponseDoneTime"] - report_dic[item_id]["PublishDoneTime"]).total_seconds()
 
-    # calcurate PublishProcessSeconds
-    if process_end_time and process_start_time:
-        report_dic[item_id]["TotalSanitizingTime"] = process_end_time - process_start_time
+    # Calculating SanitizationDoneTime.
+    if thread_id in sanitization_done_dic:
+        for sanitization_done_entry in sanitization_done_dic[thread_id]:
+            if report_dic[item_id]["SanitizationStartedTime"] <= sanitization_done_entry["SanitizationDoneTime"] <= report_dic[item_id]["PublishDoneTime"]:
+                report_dic[item_id]["SanitizationDoneTime"] = sanitization_done_entry["SanitizationDoneTime"]
 
     # count included files
-    if process_start_time and process_end_time:
-        if thread_id in ftd_dic:
-            for ftd_entry in ftd_dic[thread_id]:
-                if process_start_time <= ftd_entry["FtdTime"] and ftd_entry["FtdTime"] <= process_end_time:
-                    report_dic[item_id]["IncludedFiles"].append(ftd_entry["IncludedFile"])
+    if thread_id in ftd_dic:
+        for ftd_entry in ftd_dic[thread_id]:
+            if report_dic[item_id]["SanitizationStartedTime"] <= ftd_entry["FtdTime"] <= report_dic[item_id]["PublishDoneTime"]:
+                #if ftd_entry["IncludedFile"] not in report_dic[item_id]["IncludedFiles"]:
+                #    report_dic[item_id]["IncludedFiles"].append(ftd_entry["IncludedFile"])
+                report_dic[item_id]["IncludedFiles"].append(ftd_entry["IncludedFile"])
+    
+    included_file_count = 0 if not report_dic[item_id]["IncludedFiles"] else len(report_dic[item_id]["IncludedFiles"]) - 1
+
+    # output
+    report_format = {"ItemID": item_id,
+                     "FileName": report_dic[item_id]["FileName"],
+                     "FileSize": report_dic[item_id]["FileSize"],
+                     "FileType": report_dic[item_id]["FileType"],
+                     "RequestReceivedTime": report_dic[item_id]["RequestReceivedTime"],
+                     "SanitizationStartedTime": report_dic[item_id]["SanitizationStartedTime"],
+                     "SanitizationDoneTime": report_dic[item_id]["SanitizationDoneTime"],
+                     "PublishDoneTime": report_dic[item_id]["PublishDoneTime"],
+                     "ResponseDoneTime": report_dic[item_id]["ResponseDoneTime"],
+                     "TotalProcessSeconds": report_dic[item_id]["TotalProcessSeconds"],
+                     "UploadAndQueueWaitSeconds": report_dic[item_id]["UploadAndQueueWaitSeconds"],
+                     "PublishProcessSeconds": report_dic[item_id]["PublishProcessSeconds"],
+                     "DownloadWaitSeconds": report_dic[item_id]["DownloadWaitSeconds"],
+                     "PublishFileName": report_dic[item_id]["PublishFileName"],
+                     "IncludedFileCount": included_file_count,
+                     "Status": report_dic[item_id]["Status"],
+                     "BlockReason": report_dic[item_id]["BlockReason"]}
+    with open(log_name, 'a', encoding='utf_8_sig') as f:
+        header = report_format.keys()
+        writer = csv.DictWriter(f, fieldnames=header, lineterminator='\n')
+        writer.writerow(report_format)
 
 
-# output
-print("ItemID", "FileName", "FileSize", "FileType",
-      "RequestReceivedTime", "SanitizationStartedTime",
-      "PublishDoneTime", "ResponseDoneTime", "TotalSanitizingTime",
-      "PublishFileName", "IncludedFileCount","Status", "BlockReason", sep=',')
-for item_id in report_dic:
-    print(item_id,
-          report_dic[item_id]["FileName"].encode('utf_8_sig', 'ignore').decode('utf_8_sig', 'ignore'),
-          report_dic[item_id]["FileSize"],
-          report_dic[item_id]["FileType"],
-          "" if not report_dic[item_id]["RequestReceivedTime"] else \
-              datetime.strftime(report_dic[item_id]["RequestReceivedTime"], "%Y/%m/%d %H:%M:%S.%f").rstrip("000"),
-          "" if not report_dic[item_id]["SanitizationStartedTime"] else \
-              datetime.strftime(report_dic[item_id]["SanitizationStartedTime"], "%Y/%m/%d %H:%M:%S.%f").rstrip("000"),
-          "" if not report_dic[item_id]["PublishDoneTime"] else \
-              datetime.strftime(report_dic[item_id]["PublishDoneTime"], "%Y/%m/%d %H:%M:%S.%f").rstrip("000"),
-          "" if not report_dic[item_id]["ResponseDoneTime"] else \
-              datetime.strftime(report_dic[item_id]["ResponseDoneTime"], "%Y/%m/%d %H:%M:%S.%f").rstrip("000"),
-          report_dic[item_id]["TotalSanitizingTime"],
-          # report_dic[item_id]["IncludedFiles"].encode('utf_8_sig', 'ignore').decode('utf_8_sig', 'ignore'),
-          report_dic[item_id]["PublishFileName"].encode('utf_8_sig', 'ignore').decode('utf_8_sig', 'ignore'),
-          "" if not report_dic[item_id]["IncludedFiles"] else \
-              len(report_dic[item_id]["IncludedFiles"]) - 1,
-          report_dic[item_id]["Status"],
-          report_dic[item_id]["BlockReason"],
-          sep=','
-          )
+end_time = datetime.now()
 
-print("Completed.", file=sys.stderr)
+# how many hours take
+print("Start: {0}".format(start_time.strftime("%Y/%m/%d %H:%M:%S")))
+print("End: {0}".format(end_time.strftime("%Y/%m/%d %H:%M:%S")))
+print("Total: {0}".format(end_time - start_time))
